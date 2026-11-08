@@ -30,6 +30,26 @@ I colori dei pallini si cambiano in `config.json` (accanto al programma):
 
 > Se rinomini o sposti un PDF, rinomina o sposta anche il suo `.note.json`.
 
+## Impostazioni (⚙ Config)
+
+Il pulsante **⚙ Config** nella barra in alto apre un menu (basta passarci sopra con il mouse):
+
+- **Percorsi…**: la cartella dei libri, da cui parte *Apri…*.
+- **Keybinding…**: i tasti di ogni azione, due per azione. Clicca su una casella e premi il tasto; la ✕ svuota la casella. I tasti doppi vengono segnalati in rosso.
+
+  | Azione | Tasti predefiniti |
+  |---|---|
+  | Pagina precedente / successiva | `←` `PagSu` / `→` `PagGiù` |
+  | Ingrandisci / Rimpicciolisci | `+` `Ctrl++` / `-` `Ctrl+-` |
+  | Apri libro | `Ctrl+O` |
+  | Chiudi programma | `Ctrl+W` |
+  | Pallino di un colore | `1` `2` `3` `4`… (uno per colore della tavolozza) |
+
+  Per il **pallino da tastiera**: porta il mouse sulla riga e premi il tasto del colore. Il pallino va nel margine più vicino.
+- **Frecce laterali** e **Anteprima delle note**: interruttori per accendere o spegnere questi aiuti.
+
+Tutto viene salvato in `config.json`, nelle sezioni `percorsi`, `tasti` e `opzioni`, che si possono anche modificare a mano.
+
 ## Sviluppo
 
 ```powershell
@@ -59,6 +79,7 @@ studiopdf/
   archivio.py               il file .note.json
   tavolozza.py              i colori in config.json
   percorsi.py               dove stanno i file
+  impostazioni.py           cartella dei libri, tasti e interruttori (in config.json)
   interfaccia/              la parte grafica (PySide6)
     finestra.py             finestra principale
     vista_pagina.py         la pagina e i clic
@@ -67,6 +88,10 @@ studiopdf/
     popup.py                la finestrella per scrivere le note
     anteprima.py            la schedina che compare passando il mouse
     frecce.py               le frecce laterali per sfogliare
+    menu_config.py          il pulsante ⚙ Config e il suo menu
+    dialogo_percorsi.py     la finestra «Percorsi»
+    dialogo_tasti.py        la finestra «Keybinding»
+    traduzioni.py           i testi di Qt in italiano
 tests/                      test automatici (pytest)
 docs/                       design e piano di implementazione
 ```
