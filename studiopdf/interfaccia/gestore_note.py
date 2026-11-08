@@ -33,6 +33,8 @@ class GestoreNote:
 
         # La schedina che compare passando il mouse su una nota.
         self.anteprima = AnteprimaNota(finestra)
+        # Interruttore "Anteprima delle note" del menu Config.
+        self.anteprima_attiva = True
 
     # =========================================================================
     # Anteprima (mouse sopra una nota)
@@ -41,7 +43,7 @@ class GestoreNote:
     def mostra_anteprima(self, id: str, posizione: QPoint) -> None:
         """Mostra titolo e testo della nota in una schedina vicino al mouse."""
         archivio = self.finestra.archivio
-        if archivio is None:
+        if archivio is None or not self.anteprima_attiva:
             return
         try:
             nota = archivio.trova(id)
@@ -164,6 +166,20 @@ class GestoreNote:
         scelta = menu.exec(posizione)
         if scelta in azioni:
             self.nuovo_pallino(lato, y, azioni[scelta])
+
+    def pallino_da_tastiera(self, nome_colore: str) -> None:
+        """Tasto del colore premuto: pallino all'altezza del mouse, nel margine più vicino."""
+        if not self._modificabile():
+            return
+        colore = trova_colore(self.finestra.tavolozza, nome_colore)
+        punto = self.finestra.vista.punto_sotto_mouse()
+        if colore is None or punto is None:
+            self.finestra.statusBar().showMessage("Porta il mouse sulla riga dove mettere il pallino.", 4000)
+            return
+
+        larghezza, _ = self.finestra.documento.dimensione_pagina(self.finestra.pagina)
+        lato = "sx" if punto.x() < larghezza / 2 else "dx"
+        self.nuovo_pallino(lato, punto.y(), colore)
 
     def nuovo_pallino(self, lato: str, y: float, colore: Colore) -> None:
         """Chiede il testo e mette un pallino del colore scelto all'altezza y."""

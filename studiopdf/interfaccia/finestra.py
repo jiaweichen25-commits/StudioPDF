@@ -13,6 +13,13 @@ from PySide6.QtWidgets import QFileDialog, QLabel, QMainWindow, QMessageBox, QTo
 from studiopdf.archivio import Archivio
 from studiopdf.documento import Documento, ErroreDocumento
 from studiopdf.interfaccia.gestore_note import GestoreNote
+from studiopdf.impostazioni import (
+    PREFISSO_PALLINO,
+    ErroreImpostazioni,
+    Impostazioni,
+    carica_impostazioni,
+    salva_impostazioni,
+)
 from studiopdf.interfaccia.vista_pagina import VistaPagina
 from studiopdf.percorsi import cartella_base
 from studiopdf.tavolozza import carica_tavolozza
@@ -42,8 +49,12 @@ class FinestraPrincipale(QMainWindow):
         # Finché l'utente non cambia lo zoom a mano, la pagina si adatta alla larghezza.
         self.zoom_manuale = False
 
-        # I colori dei pallini, letti una volta all'avvio da config.json.
+        # I colori dei pallini e le impostazioni, letti all'avvio da config.json.
         self.tavolozza = carica_tavolozza(cartella_base())
+        self.impostazioni = carica_impostazioni(cartella_base(), self.tavolozza)
+
+        # Le scorciatoie da tastiera attive: azione -> elenco di QShortcut.
+        self.scorciatoie: dict[str, list[QShortcut]] = {}
 
         # --- La vista della pagina occupa tutta la finestra ---
         self.vista = VistaPagina(self)
@@ -55,8 +66,10 @@ class FinestraPrincipale(QMainWindow):
         self._collega_segnali()
         self._crea_menu()
         self._crea_barra_strumenti()
-        self._crea_scorciatoie()
         self._crea_barra_di_stato()
+
+        # Tasti e interruttori dalle impostazioni (senza riscriverle: sono appena state lette).
+        self.applica_impostazioni(self.impostazioni, salva=False)
 
     # =========================================================================
     # Costruzione dell'interfaccia
@@ -78,8 +91,8 @@ class FinestraPrincipale(QMainWindow):
     def _crea_menu(self) -> None:
         menu_file = self.menuBar().addMenu("&File")
 
+        # Il tasto per "Apri" non si mette qui: è una scorciatoia configurabile (vedi _applica_tasti).
         azione_apri = menu_file.addAction("&Apri…")
-        azione_apri.setShortcut(QKeySequence.StandardKey.Open)  # Ctrl+O
         azione_apri.triggered.connect(self.scegli_e_apri)
 
         menu_file.addSeparator()
@@ -103,26 +116,11 @@ class FinestraPrincipale(QMainWindow):
         self.azione_rimpicciolisci.triggered.connect(lambda: self.cambia_zoom(-1))
         self.azione_ingrandisci.triggered.connect(lambda: self.cambia_zoom(+1))
 
-    def _crea_scorciatoie(self) -> None:
-        """Tasti per sfogliare e zoomare. Ogni coppia è (tasto, funzione da chiamare)."""
-        scorciatoie = [
-            ("Right", self.pagina_successiva),
-            ("PgDown", self.pagina_successiva),
-            ("Left", self.pagina_precedente),
-            ("PgUp", self.pagina_precedente),
-            ("+", lambda: self.cambia_zoom(+1)),
-            ("-", lambda: self.cambia_zoom(-1)),
-            ("Ctrl++", lambda: self.cambia_zoom(+1)),
-            ("Ctrl+-", lambda: self.cambia_zoom(-1)),
-        ]
-        for tasto, funzione in scorciatoie:
-            QShortcut(QKeySequence(tasto), self, activated=funzione)
-
     def _crea_barra_di_stato(self) -> None:
         # A destra, fisso: il numero di pagina. A sinistra: i messaggi brevi.
         self.etichetta_pagina = QLabel("")
         self.statusBar().addPermanentWidget(self.etichetta_pagina)
-        self.statusBar().showMessage("Apri un PDF con File → Apri… (Ctrl+O)")
+        self.statusBar().showMessage("Apri un PDF con File → Apri…")
 
     # =========================================================================
     # Aprire un libro
@@ -130,9 +128,16 @@ class FinestraPrincipale(QMainWindow):
 
     def scegli_e_apri(self) -> None:
         """Mostra la finestra di scelta del file e apre il PDF scelto."""
-        percorso, _ = QFileDialog.getOpenFileName(self, "Apri un PDF", "", "Documenti PDF (*.pdf)")
+        percorso, _ = QFileDialog.getOpenFileName(
+            self, "Apri un PDF", self.cartella_iniziale_apri(), "Documenti PDF (*.pdf)"
+        )
         if percorso:  # stringa vuota = l'utente ha annullato
             self.apri(percorso)
+
+    def cartella_iniziale_apri(self) -> str:
+        """La cartella da cui parte "Apri…": quella dei libri, se esiste ("" = predefinita di Windows)."""
+        cartella = self.impostazioni.cartella_libri
+        return cartella if cartella and Path(cartella).is_dir() else ""
 
     def apri(self, percorso: str | Path) -> None:
         """Apre il PDF indicato insieme alle sue note.
@@ -200,6 +205,69 @@ class FinestraPrincipale(QMainWindow):
                 f"({self.archivio.percorso_note.name}).\n\n"
                 "Per non rovinarlo, le note di questo libro non verranno salvate.",
             )
+
+    # =========================================================================
+    # Impostazioni: tasti e interruttori
+    # =========================================================================
+
+    def applica_impostazioni(self, nuove: Impostazioni, salva: bool = True) -> None:
+        """Rende attive le impostazioni (tasti, interruttori) e, se richiesto, le salva.
+
+        Se il salvataggio non riesce si avvisa, ma le impostazioni valgono
+        comunque finché il programma resta aperto.
+        """
+        self.impostazioni = nuove
+        self._applica_tasti()
+        self.vista.frecce_attive = nuove.frecce_laterali
+        self.gestore_note.anteprima_attiva = nuove.anteprima_note
+        if not nuove.frecce_laterali:
+            self.vista.nascondi_frecce()
+        if not nuove.anteprima_note:
+            self.gestore_note.nascondi_anteprima()
+
+        if salva:
+            try:
+                salva_impostazioni(cartella_base(), nuove)
+            except (ErroreImpostazioni, OSError) as errore:
+                self.avvisa(
+                    "Impostazioni non salvate",
+                    f"{errore}\n\nLe impostazioni valgono finché il programma resta aperto.",
+                )
+
+    def _applica_tasti(self) -> None:
+        """Toglie tutte le scorciatoie e le ricrea dai tasti delle impostazioni."""
+        for elenco in self.scorciatoie.values():
+            for scorciatoia in elenco:
+                scorciatoia.setEnabled(False)  # spenta subito...
+                scorciatoia.deleteLater()  # ...ed eliminata appena possibile
+        self.scorciatoie = {}
+
+        for azione, tasti in self.impostazioni.tasti.items():
+            funzione = self._funzione_azione(azione)
+            if funzione is None:
+                continue  # azione sconosciuta (es. pallino di un colore tolto)
+            self.scorciatoie[azione] = [
+                QShortcut(QKeySequence(tasto), self, activated=funzione) for tasto in tasti if tasto.strip()
+            ]
+
+    def _funzione_azione(self, azione: str):
+        """Cosa fa ogni azione. Restituisce una funzione senza argomenti (o None)."""
+        funzioni = {
+            "pagina_precedente": self.pagina_precedente,
+            "pagina_successiva": self.pagina_successiva,
+            "ingrandisci": lambda: self.cambia_zoom(+1),
+            "rimpicciolisci": lambda: self.cambia_zoom(-1),
+            "apri_libro": self.scegli_e_apri,
+            "chiudi_programma": self.close,
+        }
+        if azione in funzioni:
+            return funzioni[azione]
+        if azione.startswith(PREFISSO_PALLINO):
+            nome_colore = azione[len(PREFISSO_PALLINO):]
+            # "nome=nome_colore" fissa il valore ADESSO: senza, tutte le lambda
+            # create nel ciclo userebbero l'ultimo colore.
+            return lambda nome=nome_colore: self.gestore_note.pallino_da_tastiera(nome)
+        return None
 
     # =========================================================================
     # Sfogliare

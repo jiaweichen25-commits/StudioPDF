@@ -77,6 +77,9 @@ class VistaPagina(QGraphicsView):
         # Gli elementi grafici delle note attualmente nella scena.
         self._elementi_note: list[QGraphicsItem] = []
 
+        # Interruttore "Frecce laterali" del menu Config.
+        self.frecce_attive = True
+
         # La nota su cui si trova il mouse in questo momento (None = nessuna).
         self._nota_sorvolata: str | None = None
         # Senza "mouse tracking" Qt segnala i movimenti solo a pulsante premuto:
@@ -256,6 +259,9 @@ class VistaPagina(QGraphicsView):
 
     def aggiorna_frecce(self, posizione_vista: QPoint) -> None:
         """Mostra la freccia ‹ o › se il mouse è vicino a quel bordo e la pagina esiste."""
+        if not self.frecce_attive:
+            self.nascondi_frecce()
+            return
         vicino_a_sinistra = posizione_vista.x() < frecce.ZONA_SENSIBILE
         vicino_a_destra = posizione_vista.x() > self.viewport().width() - frecce.ZONA_SENSIBILE
 
@@ -264,6 +270,16 @@ class VistaPagina(QGraphicsView):
 
         self.freccia_sinistra.setVisible(vicino_a_sinistra and esiste_precedente)
         self.freccia_destra.setVisible(vicino_a_destra and esiste_successiva)
+
+    def punto_sotto_mouse(self) -> QPointF | None:
+        """Dove si trova ora il mouse sulla pagina (coordinate PDF); None se non è sulla pagina."""
+        if self._documento is None:
+            return None
+        posizione = self.viewport().mapFromGlobal(QCursor.pos())
+        if not self.viewport().rect().contains(posizione):
+            return None
+        punto = self.mapToScene(posizione)
+        return punto if self._dentro_la_pagina(punto) else None
 
     def nascondi_frecce(self) -> None:
         self.freccia_sinistra.hide()
