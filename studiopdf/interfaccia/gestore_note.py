@@ -158,7 +158,10 @@ class GestoreNote:
         return True
 
     def _salva_e_ridisegna(self) -> None:
-        """Salva su disco; se non ci riesce avvisa, ma la nota resta in memoria."""
+        """Salva su disco e ridisegna le note (la pagina e lo scorrimento non cambiano).
+
+        Se il salvataggio non riesce avvisa, ma la nota resta in memoria.
+        """
         try:
             self.finestra.archivio.salva()
         except OSError as errore:
@@ -168,7 +171,7 @@ class GestoreNote:
                 "Le modifiche restano finché il programma è aperto; "
                 "al prossimo cambiamento riproverò a salvare.",
             )
-        self.finestra.ridisegna()
+        self.finestra.ridisegna_note()
 
 
 def _icona_colore(codice_colore: str) -> QIcon:

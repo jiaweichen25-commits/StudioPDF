@@ -95,12 +95,21 @@ class Documento:
 
     def parole(self, pagina: int) -> list[Parola]:
         """Tutte le parole della pagina, nell'ordine di lettura."""
+        pagina_pdf = self._pagina(pagina)
         risultato = []
         # get_text("words") restituisce tuple: (x0, y0, x1, y1, testo, blocco, riga, n_parola)
-        for x0, y0, x1, y1, testo, *_ in self._pagina(pagina).get_text("words"):
+        for x0, y0, x1, y1, testo, *_ in pagina_pdf.get_text("words"):
             testo_pulito = pulisci(testo)
-            if testo_pulito:  # una "parola" fatta solo di punteggiatura si scarta
-                risultato.append(Parola(testo_pulito, (x0, y0, x1, y1)))
+            if not testo_pulito:  # una "parola" fatta solo di punteggiatura si scarta
+                continue
+
+            # Pagine ruotate (/Rotate 90, tipico per le tabelle in orizzontale):
+            # PyMuPDF dà le coordinate della pagina "non ruotata", mentre l'immagine
+            # e le dimensioni sono quelle ruotate. rotation_matrix converte dalle
+            # une alle altre; normalize() rimette in ordine gli angoli del rettangolo.
+            rettangolo = pymupdf.Rect(x0, y0, x1, y1) * pagina_pdf.rotation_matrix
+            rettangolo.normalize()
+            risultato.append(Parola(testo_pulito, tuple(rettangolo)))
         return risultato
 
     def parola_in(self, pagina: int, x: float, y: float) -> Parola | None:

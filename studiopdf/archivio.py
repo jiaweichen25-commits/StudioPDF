@@ -36,9 +36,11 @@ class Archivio:
         self.sottolineature: list[Sottolineatura] = []
         self.pallini: list[Pallino] = []
 
-        # True se il file è di una versione futura: in quel caso non si salva mai,
-        # per non rovinare dati che questo programma non capisce.
+        # Se True non si salva mai, per non rovinare dati sul disco. Succede se:
+        #   "versione_futura"  -> il file è di una versione più nuova del programma;
+        #   "file_illeggibile" -> il file è rotto ma non si è riusciti a spostarlo.
         self.sola_lettura = False
+        self.motivo_sola_lettura: str | None = None
 
         # Se il file era illeggibile, qui c'è il nuovo nome con cui è stato messo da parte.
         self.file_rotto: Path | None = None
@@ -56,7 +58,8 @@ class Archivio:
             return archivio  # libro senza note: archivio vuoto
 
         try:
-            dati = json.loads(archivio.percorso_note.read_text(encoding="utf-8"))
+            # "utf-8-sig" legge anche i file salvati "UTF-8 con BOM" (Blocco note, PowerShell).
+            dati = json.loads(archivio.percorso_note.read_text(encoding="utf-8-sig"))
             versione = dati["versione"]
             if not isinstance(versione, int):
                 raise ValueError("versione non valida")
@@ -64,6 +67,7 @@ class Archivio:
             if versione > VERSIONE:
                 # File scritto da un programma più nuovo: non lo tocchiamo.
                 archivio.sola_lettura = True
+                archivio.motivo_sola_lettura = "versione_futura"
                 return archivio
 
             archivio._leggi_dati(dati)
@@ -71,7 +75,13 @@ class Archivio:
             # ValueError comprende JSON non valido e testo non UTF-8.
             # Il file non si capisce: lo mettiamo da parte e ripartiamo vuoti.
             archivio._ripristina_vuoto()
-            archivio.file_rotto = archivio._metti_da_parte_file_rotto()
+            try:
+                archivio.file_rotto = archivio._metti_da_parte_file_rotto()
+            except OSError:
+                # Non si riesce nemmeno a spostarlo (cartella protetta...): allora
+                # non si salva niente, così il file rotto resta com'è.
+                archivio.sola_lettura = True
+                archivio.motivo_sola_lettura = "file_illeggibile"
 
         return archivio
 
@@ -158,7 +168,8 @@ class Archivio:
             "sottolineature": [asdict(s) for s in self.sottolineature],
             "pallini": [asdict(p) for p in self.pallini],
         }
-        # ensure_ascii=False scrive "perché" e non "perché".
+        # ensure_ascii=False scrive le lettere accentate così come sono ("perché"),
+        # invece del codice di escape ("perch\u00e9").
         testo = json.dumps(dati, ensure_ascii=False, indent=2)
 
         temporaneo = Path(f"{self.percorso_note}.tmp")

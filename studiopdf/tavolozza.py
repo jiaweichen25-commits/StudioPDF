@@ -30,18 +30,23 @@ TAVOLOZZA_BASE = [
 def carica_tavolozza(cartella: Path) -> list[Colore]:
     """Legge la tavolozza da <cartella>/config.json.
 
-    - Se il file non esiste: lo crea con TAVOLOZZA_BASE e la restituisce.
+    - Se il file non esiste: lo crea con TAVOLOZZA_BASE (se la cartella è
+      scrivibile) e restituisce TAVOLOZZA_BASE.
     - Se il file esiste ma è illeggibile: restituisce TAVOLOZZA_BASE
       SENZA toccare il file (così l'utente può correggerlo a mano).
     """
     percorso = Path(cartella) / NOME_FILE_CONFIG
 
     if not percorso.exists():
-        _scrivi_tavolozza(percorso, TAVOLOZZA_BASE)
+        try:
+            _scrivi_tavolozza(percorso, TAVOLOZZA_BASE)
+        except OSError:
+            pass  # cartella non scrivibile (es. Programmi): si usano i colori di base e basta
         return list(TAVOLOZZA_BASE)
 
     try:
-        dati = json.loads(percorso.read_text(encoding="utf-8"))
+        # "utf-8-sig" legge anche i file salvati "UTF-8 con BOM" (Blocco note, PowerShell).
+        dati = json.loads(percorso.read_text(encoding="utf-8-sig"))
         tavolozza = [
             Colore(nome=str(voce["nome"]), colore=str(voce["colore"]), significato=str(voce["significato"]))
             for voce in dati["tavolozza"]

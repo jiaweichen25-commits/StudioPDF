@@ -66,7 +66,15 @@ class VistaPagina(QGraphicsView):
     # =========================================================================
 
     def mostra_pagina(self, documento: Documento, pagina: int, zoom: float) -> None:
-        """Disegna la pagina con lo zoom indicato (1 = 1 pixel per punto PDF)."""
+        """Disegna la pagina con lo zoom indicato (1 = 1 pixel per punto PDF).
+
+        Se è la STESSA pagina di prima (es. cambio di zoom o di dimensione della
+        finestra) resta visibile lo stesso punto; se è una pagina nuova si parte dall'alto.
+        """
+        stessa_pagina = documento is self._documento and pagina == self._pagina
+        # Il punto della pagina che ora sta al centro della vista (in punti PDF).
+        centro_visibile = self.mapToScene(self.viewport().rect().center()) if stessa_pagina else None
+
         self._documento = documento
         self._pagina = pagina
 
@@ -94,8 +102,10 @@ class VistaPagina(QGraphicsView):
         larghezza, altezza = documento.dimensione_pagina(pagina)
         self.setSceneRect(0, 0, larghezza, altezza)
 
-        # Pagina nuova: si riparte dall'alto.
-        self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())
+        if centro_visibile is not None:
+            self.centerOn(centro_visibile)  # stessa pagina: si torna a guardare lo stesso punto
+        else:
+            self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())  # pagina nuova: dall'alto
 
     def zoom_larghezza(self, documento: Documento, pagina: int) -> float:
         """Lo zoom con cui la pagina riempie la larghezza della vista."""

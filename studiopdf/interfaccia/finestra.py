@@ -8,7 +8,7 @@ la barra di stato e gli avvisi. Cosa succede quando si clicca una nota
 from pathlib import Path
 
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QFileDialog, QLabel, QMainWindow, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QLabel, QMainWindow, QMessageBox, QToolBar
 
 from studiopdf.archivio import Archivio
 from studiopdf.documento import Documento, ErroreDocumento
@@ -20,7 +20,7 @@ from studiopdf.tavolozza import carica_tavolozza
 # Limiti e passo dello zoom.
 ZOOM_MINIMO = 0.25
 ZOOM_MASSIMO = 5.0
-PASSO_ZOOM = 1.2  # ogni "scatto" ingrandisce o rimpicciolisce del 20%
+PASSO_ZOOM = 1.2  # ogni "scatto" moltiplica (ingrandisci) o divide (rimpicciolisci) lo zoom per 1.2
 
 # Per quanto tempo restano visibili i messaggi brevi nella barra di stato.
 DURATA_MESSAGGI_MS = 3000
@@ -54,6 +54,7 @@ class FinestraPrincipale(QMainWindow):
 
         self._collega_segnali()
         self._crea_menu()
+        self._crea_barra_strumenti()
         self._crea_scorciatoie()
         self._crea_barra_di_stato()
 
@@ -79,6 +80,23 @@ class FinestraPrincipale(QMainWindow):
         menu_file.addSeparator()
         azione_esci = menu_file.addAction("&Esci")
         azione_esci.triggered.connect(self.close)
+
+    def _crea_barra_strumenti(self) -> None:
+        """Pulsanti per sfogliare e zoomare con il mouse."""
+        barra = QToolBar("Navigazione", self)
+        barra.setMovable(False)
+        self.addToolBar(barra)
+
+        self.azione_precedente = barra.addAction("◀  Indietro")
+        self.azione_successiva = barra.addAction("Avanti  ▶")
+        barra.addSeparator()
+        self.azione_rimpicciolisci = barra.addAction("−  Zoom")
+        self.azione_ingrandisci = barra.addAction("Zoom  +")
+
+        self.azione_precedente.triggered.connect(self.pagina_precedente)
+        self.azione_successiva.triggered.connect(self.pagina_successiva)
+        self.azione_rimpicciolisci.triggered.connect(lambda: self.cambia_zoom(-1))
+        self.azione_ingrandisci.triggered.connect(lambda: self.cambia_zoom(+1))
 
     def _crea_scorciatoie(self) -> None:
         """Tasti per sfogliare e zoomare. Ogni coppia è (tasto, funzione da chiamare)."""
@@ -112,19 +130,33 @@ class FinestraPrincipale(QMainWindow):
             self.apri(percorso)
 
     def apri(self, percorso: str | Path) -> None:
-        """Apre il PDF indicato insieme alle sue note."""
+        """Apre il PDF indicato insieme alle sue note.
+
+        PDF e note si aprono "insieme": se una delle due cose non riesce, resta
+        aperto il libro di prima, così le note non finiscono mai nel file sbagliato.
+        """
         try:
             nuovo_documento = Documento(percorso)
         except ErroreDocumento as errore:
             self.avvisa("PDF non apribile", str(errore))
             return
 
-        # Chiudiamo il libro precedente solo DOPO aver aperto il nuovo con successo.
+        try:
+            nuovo_archivio = Archivio.carica(percorso)
+        except OSError as errore:  # es. file non disponibile, permessi
+            nuovo_documento.chiudi()
+            self.avvisa(
+                "Note non leggibili",
+                f"Non riesco a leggere le note di «{nuovo_documento.percorso.name}»:\n{errore}\n\n"
+                "Il libro non è stato aperto, per non rischiare di perdere le note.",
+            )
+            return
+
+        # Tutto a posto: chiudiamo il libro precedente e passiamo al nuovo.
         if self.documento is not None:
             self.documento.chiudi()
-
         self.documento = nuovo_documento
-        self.archivio = Archivio.carica(percorso)
+        self.archivio = nuovo_archivio
         self._avvisa_problemi_archivio()
 
         self.zoom_manuale = False
@@ -149,11 +181,18 @@ class FinestraPrincipale(QMainWindow):
                 f"{self.archivio.file_rotto.name}\n\n"
                 "Non è stato cancellato niente. Si riparte con le note vuote.",
             )
-        if self.archivio.sola_lettura:
+        if self.archivio.motivo_sola_lettura == "versione_futura":
             self.avvisa(
                 "Note in sola lettura",
                 "Il file delle note è stato creato da una versione più nuova di StudioPDF.\n"
-                "Il libro si apre, ma le note non verranno modificate.",
+                "Il libro si apre, ma le note non vengono mostrate né modificate.",
+            )
+        elif self.archivio.motivo_sola_lettura == "file_illeggibile":
+            self.avvisa(
+                "Note in sola lettura",
+                "Il file delle note è illeggibile e non si è potuto metterlo da parte\n"
+                f"({self.archivio.percorso_note.name}).\n\n"
+                "Per non rovinarlo, le note di questo libro non verranno salvate.",
             )
 
     # =========================================================================
@@ -193,18 +232,22 @@ class FinestraPrincipale(QMainWindow):
     # =========================================================================
 
     def ridisegna(self) -> None:
-        """Ridisegna la pagina corrente con le sue note e aggiorna il numero di pagina."""
+        """Ridisegna la pagina corrente (immagine + note) e aggiorna il numero di pagina."""
         if self.documento is None:
             return
         self.vista.mostra_pagina(self.documento, self.pagina, self.zoom)
+        self.ridisegna_note()
+        self.etichetta_pagina.setText(f"pagina {self.pagina} / {self.documento.numero_pagine}")
 
+    def ridisegna_note(self) -> None:
+        """Ridisegna solo le note della pagina corrente (più veloce: l'immagine resta)."""
+        if self.documento is None:
+            return
         sottolineature, pallini = self.archivio.della_pagina(self.pagina)
         segnalibro = self.archivio.segnalibro
         if segnalibro is not None and segnalibro.pagina != self.pagina:
             segnalibro = None  # il segnalibro si disegna solo sulla sua pagina
         self.vista.disegna_note(sottolineature, pallini, segnalibro, self.tavolozza, self.documento)
-
-        self.etichetta_pagina.setText(f"pagina {self.pagina} / {self.documento.numero_pagine}")
 
     def avvisa(self, titolo: str, testo: str) -> None:
         """Mostra un messaggio di avviso (finestrella con OK)."""
