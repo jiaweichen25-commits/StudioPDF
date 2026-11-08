@@ -66,6 +66,7 @@ class FinestraPrincipale(QMainWindow):
         self.vista.zoomRichiesto.connect(self.cambia_zoom)
         self.vista.menuParola.connect(self.gestore_note.quando_menu_parola)
         self.vista.clicNota.connect(self.gestore_note.apri_nota)
+        self.vista.clicMargine.connect(self.gestore_note.quando_clic_margine)
         self.vista.messaggio.connect(lambda testo: self.statusBar().showMessage(testo, DURATA_MESSAGGI_MS))
 
     def _crea_menu(self) -> None:

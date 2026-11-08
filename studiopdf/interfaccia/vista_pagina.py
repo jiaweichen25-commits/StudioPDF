@@ -26,7 +26,7 @@ from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView
 from studiopdf.documento import Documento
 from studiopdf.interfaccia import disegno
 from studiopdf.note import Pallino, Segnalibro, Sottolineatura
-from studiopdf.tavolozza import Colore
+from studiopdf.tavolozza import Colore, trova_colore
 
 # Spazio (in pixel) lasciato ai lati della pagina con "adatta alla larghezza".
 MARGINE_VISTA = 20
@@ -43,6 +43,7 @@ class VistaPagina(QGraphicsView):
     zoomRichiesto = Signal(int)  # Ctrl+rotellina: +1 ingrandisci, -1 rimpicciolisci
     menuParola = Signal(object, QPoint)  # clic destro su una parola: (Parola, posizione sullo schermo)
     clicNota = Signal(str)  # clic sinistro su una nota: id della nota
+    clicMargine = Signal(str, float, QPoint)  # clic nel margine: (lato "sx"/"dx", y in punti PDF, posizione sullo schermo)
     messaggio = Signal(str)  # un breve messaggio per la barra di stato
 
     def __init__(self, parent=None) -> None:
@@ -119,6 +120,11 @@ class VistaPagina(QGraphicsView):
         for sottolineatura in sottolineature:
             nuovi += disegno.crea_sottolineatura(sottolineatura)
 
+        posizioni = disegno.posizioni_pallini(pallini, documento)
+        for pallino in pallini:
+            x, y = posizioni[pallino.id]
+            nuovi.append(disegno.crea_pallino(pallino, x, y, trova_colore(tavolozza, pallino.colore)))
+
         for elemento in nuovi:
             scena.addItem(elemento)
         self._elementi_note = nuovi
@@ -140,13 +146,26 @@ class VistaPagina(QGraphicsView):
     def gestisci_clic_sinistro(self, punto: QPointF, posizione_schermo: QPoint) -> bool:
         """Clic sinistro nel punto (in coordinate PDF).
 
-        Restituisce True se il clic è stato "usato" (per esempio su una nota).
+        Restituisce True se il clic è stato "usato" (su una nota o nel margine).
         """
+        # 1) Su una nota esistente? Allora si apre quella nota.
         id_nota = self._id_nota_in(punto)
         if id_nota is not None:
             self.clicNota.emit(id_nota)
             return True
+
+        # 2) Nel margine della pagina? Allora si vuole un pallino nuovo.
+        if self._documento is None or not self._dentro_la_pagina(punto):
+            return False
+        lato = self._documento.lato_margine(self._pagina, punto.x())
+        if lato is not None:
+            self.clicMargine.emit(lato, punto.y(), posizione_schermo)
+            return True
         return False
+
+    def _dentro_la_pagina(self, punto: QPointF) -> bool:
+        larghezza, altezza = self._documento.dimensione_pagina(self._pagina)
+        return 0 <= punto.x() <= larghezza and 0 <= punto.y() <= altezza
 
     def _id_nota_in(self, punto: QPointF) -> str | None:
         """L'id della nota che si trova nel punto, oppure None."""

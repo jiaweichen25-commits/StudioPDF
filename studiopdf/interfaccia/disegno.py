@@ -9,9 +9,11 @@ Tutte le coordinate sono in punti PDF (vedi vista_pagina.py).
 
 from PySide6.QtCore import QLineF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QPen
-from PySide6.QtWidgets import QGraphicsItem, QGraphicsLineItem, QGraphicsRectItem
+from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, QGraphicsLineItem, QGraphicsRectItem
 
-from studiopdf.note import Sottolineatura
+from studiopdf.documento import Documento
+from studiopdf.note import Pallino, Sottolineatura
+from studiopdf.tavolozza import Colore
 
 # Ogni elemento cliccabile si porta dietro l'id della sua nota,
 # salvato con setData(CHIAVE_ID, id). Gli altri elementi non hanno id.
@@ -21,6 +23,13 @@ CHIAVE_ID = 0
 COLORE_SOTTOLINEATURA = QColor("#3E63DD")
 SPESSORE_SOTTOLINEATURA = 2  # in pixel dello schermo (non cambia con lo zoom)
 DISTANZA_SOTTOLINEATURA = 1  # punti PDF sotto il bordo inferiore della parola
+
+# --- Aspetto dei pallini (misure in punti PDF) ---
+RAGGIO_PALLINO = 5
+DISTANZA_MINIMA_PALLINI = 10  # due pallini più vicini di così in altezza si sovrapporrebbero...
+SPOSTAMENTO_PALLINI = 12  # ...e allora il secondo si sposta di lato di questa quantità
+COLORE_SCONOSCIUTO = "#9E9E9E"  # grigio: per un colore tolto dalla tavolozza
+COLORE_BORDO_PALLINO = QColor(255, 255, 255, 200)  # bordino bianco: si vede anche su fondi scuri
 
 # Le note stanno sopra la pagina (che ha livello 0).
 LIVELLO_NOTE = 2
@@ -51,3 +60,55 @@ def crea_sottolineatura(sottolineatura: Sottolineatura) -> list[QGraphicsItem]:
     for elemento in (linea, area_clic):
         elemento.setZValue(LIVELLO_NOTE)
     return [linea, area_clic]
+
+
+def posizioni_pallini(pallini: list[Pallino], documento: Documento) -> dict[str, tuple[float, float]]:
+    """Calcola dove disegnare ogni pallino: {id: (x, y)}.
+
+    - La y è quella della riga accanto a cui il pallino è stato messo.
+    - La x è il centro del margine (sinistro o destro).
+    - Se più pallini sono quasi alla stessa altezza, quelli successivi si
+      spostano di lato, verso il bordo esterno della pagina, per non coprirsi.
+    """
+    posizioni: dict[str, tuple[float, float]] = {}
+
+    for lato in ("sx", "dx"):
+        # Verso il bordo esterno: a sinistra le x diminuiscono, a destra aumentano.
+        direzione = -1 if lato == "sx" else +1
+
+        pallini_del_lato = sorted((p for p in pallini if p.lato == lato), key=lambda p: p.y)
+        spostamento = 0.0
+        y_precedente: float | None = None
+
+        for pallino in pallini_del_lato:
+            vicino_al_precedente = y_precedente is not None and pallino.y - y_precedente < DISTANZA_MINIMA_PALLINI
+            spostamento = spostamento + SPOSTAMENTO_PALLINI if vicino_al_precedente else 0.0
+
+            x = documento.centro_margine(pallino.pagina, lato) + direzione * spostamento
+            larghezza_pagina, _ = documento.dimensione_pagina(pallino.pagina)
+            x = min(max(x, RAGGIO_PALLINO), larghezza_pagina - RAGGIO_PALLINO)  # mai fuori dalla pagina
+
+            posizioni[pallino.id] = (x, pallino.y)
+            y_precedente = pallino.y
+
+    return posizioni
+
+
+def crea_pallino(pallino: Pallino, x: float, y: float, colore: Colore | None) -> QGraphicsEllipseItem:
+    """Un cerchio pieno centrato in (x, y). Se colore è None (non più in tavolozza) è grigio."""
+    codice_colore = colore.colore if colore is not None else COLORE_SCONOSCIUTO
+
+    # Un'ellisse si descrive con il rettangolo che la contiene: angolo in alto a sinistra + lati.
+    cerchio = QGraphicsEllipseItem(
+        QRectF(x - RAGGIO_PALLINO, y - RAGGIO_PALLINO, 2 * RAGGIO_PALLINO, 2 * RAGGIO_PALLINO)
+    )
+    cerchio.setBrush(QBrush(QColor(codice_colore)))
+    bordo = QPen(COLORE_BORDO_PALLINO, 1)
+    bordo.setCosmetic(True)
+    cerchio.setPen(bordo)
+
+    cerchio.setData(CHIAVE_ID, pallino.id)
+    cerchio.setCursor(Qt.CursorShape.PointingHandCursor)
+    cerchio.setToolTip(pallino.testo)
+    cerchio.setZValue(LIVELLO_NOTE + 1)  # sopra le sottolineature
+    return cerchio

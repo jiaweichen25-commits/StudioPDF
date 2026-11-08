@@ -8,11 +8,13 @@ aggiornare l'archivio, salvare e ridisegnare.
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QPoint
+from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import QMenu
 
 from studiopdf.documento import Parola
 from studiopdf.interfaccia.popup import RisultatoPopup, chiedi_nota
 from studiopdf.note import Sottolineatura
+from studiopdf.tavolozza import Colore, trova_colore
 
 # TYPE_CHECKING è vero solo per gli strumenti che controllano i tipi, mai
 # durante l'esecuzione: così evitiamo un import circolare con finestra.py.
@@ -64,6 +66,33 @@ class GestoreNote:
             self._salva_e_ridisegna()
 
     # =========================================================================
+    # Pallini nel margine
+    # =========================================================================
+
+    def quando_clic_margine(self, lato: str, y: float, posizione: QPoint) -> None:
+        """Clic nel margine: menu con i colori della tavolozza, poi il pop-up."""
+        if not self._modificabile():
+            return
+        menu = QMenu(self.finestra)
+        azioni = {}  # azione del menu -> colore corrispondente
+        for colore in self.finestra.tavolozza:
+            azione = menu.addAction(_icona_colore(colore.colore), f"{colore.nome} — {colore.significato}")
+            azioni[azione] = colore
+
+        scelta = menu.exec(posizione)
+        if scelta in azioni:
+            self.nuovo_pallino(lato, y, azioni[scelta])
+
+    def nuovo_pallino(self, lato: str, y: float, colore: Colore) -> None:
+        """Chiede il testo e mette un pallino del colore scelto all'altezza y."""
+        if not self._modificabile():
+            return
+        risposta = self.chiedi(self._titolo_pallino(colore.nome))
+        if risposta is not None and risposta[0] == "salva":
+            self.finestra.archivio.aggiungi_pallino(self.finestra.pagina, y, lato, colore.nome, risposta[1])
+            self._salva_e_ridisegna()
+
+    # =========================================================================
     # Aprire una nota esistente (clic sinistro su sottolineatura o pallino)
     # =========================================================================
 
@@ -101,7 +130,9 @@ class GestoreNote:
         return chiedi_nota(self.finestra, titolo, testo, eliminabile)
 
     def _titolo_pallino(self, nome_colore: str) -> str:
-        return f"● {nome_colore}"
+        """Titolo del pop-up di un pallino: il SIGNIFICATO del colore (es. "● da ripassare")."""
+        colore = trova_colore(self.finestra.tavolozza, nome_colore)
+        return f"● {colore.significato}" if colore else f"● {nome_colore}"
 
     def _modificabile(self) -> bool:
         """Si possono cambiare le note? (c'è un libro aperto e non è in sola lettura)"""
@@ -125,3 +156,10 @@ class GestoreNote:
                 "al prossimo cambiamento riproverò a salvare.",
             )
         self.finestra.ridisegna()
+
+
+def _icona_colore(codice_colore: str) -> QIcon:
+    """Un quadratino pieno del colore indicato, da mostrare accanto alle voci del menu."""
+    quadratino = QPixmap(16, 16)
+    quadratino.fill(QColor(codice_colore))
+    return QIcon(quadratino)
