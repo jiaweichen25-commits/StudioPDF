@@ -20,3 +20,4 @@ config.json
 # file di lavoro locali (non pubblicati)
 .superpowers/sdd
 tests/
+docs/

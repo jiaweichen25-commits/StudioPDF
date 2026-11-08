@@ -91,7 +91,6 @@ studiopdf/
     dialogo_percorsi.py     la finestra «Percorsi»
     dialogo_tasti.py        la finestra «Keybinding»
     traduzioni.py           i testi di Qt in italiano
-docs/                       design e piano di implementazione
 ```
 
 ## Licenza
