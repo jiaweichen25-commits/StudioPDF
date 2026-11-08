@@ -12,7 +12,7 @@ from PySide6.QtGui import QBrush, QColor, QPen
 from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, QGraphicsLineItem, QGraphicsRectItem
 
 from studiopdf.documento import Documento
-from studiopdf.note import Pallino, Sottolineatura
+from studiopdf.note import Pallino, Segnalibro, Sottolineatura
 from studiopdf.tavolozza import Colore
 
 # Ogni elemento cliccabile si porta dietro l'id della sua nota,
@@ -30,6 +30,9 @@ DISTANZA_MINIMA_PALLINI = 10  # due pallini più vicini di così in altezza si s
 SPOSTAMENTO_PALLINI = 12  # ...e allora il secondo si sposta di lato di questa quantità
 COLORE_SCONOSCIUTO = "#9E9E9E"  # grigio: per un colore tolto dalla tavolozza
 COLORE_BORDO_PALLINO = QColor(255, 255, 255, 200)  # bordino bianco: si vede anche su fondi scuri
+
+# --- Aspetto del segnalibro: un'evidenziazione gialla trasparente ---
+COLORE_SEGNALIBRO = QColor(255, 220, 0, 90)  # rosso, verde, blu, trasparenza (0-255)
 
 # Le note stanno sopra la pagina (che ha livello 0).
 LIVELLO_NOTE = 2
@@ -112,3 +115,17 @@ def crea_pallino(pallino: Pallino, x: float, y: float, colore: Colore | None) ->
     cerchio.setToolTip(pallino.testo)
     cerchio.setZValue(LIVELLO_NOTE + 1)  # sopra le sottolineature
     return cerchio
+
+
+def crea_segnalibro(segnalibro: Segnalibro) -> QGraphicsRectItem:
+    """Evidenzia in giallo la parola del segnalibro.
+
+    Non ha un id: non è una nota da aprire, quindi cliccandolo non succede niente.
+    """
+    x0, y0, x1, y1 = segnalibro.rett
+    evidenziatore = QGraphicsRectItem(QRectF(x0, y0, x1 - x0, y1 - y0))
+    evidenziatore.setPen(QPen(Qt.PenStyle.NoPen))
+    evidenziatore.setBrush(QBrush(COLORE_SEGNALIBRO))
+    evidenziatore.setToolTip("Mi sono fermato qui")
+    evidenziatore.setZValue(LIVELLO_NOTE - 1)  # sotto sottolineature e pallini
+    return evidenziatore

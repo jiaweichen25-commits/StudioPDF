@@ -129,7 +129,16 @@ class FinestraPrincipale(QMainWindow):
 
         self.zoom_manuale = False
         self.setWindowTitle(f"{TITOLO} — {self.documento.percorso.name}")
-        self.vai_a(1)
+        self._vai_al_segnalibro()
+
+    def _vai_al_segnalibro(self) -> None:
+        """Apre il libro dove ci si era fermati (o a pagina 1 se non c'è segnalibro)."""
+        pagina = self.archivio.pagina_di_partenza(self.documento.numero_pagine)
+        self.vai_a(pagina)
+
+        segnalibro = self.archivio.segnalibro
+        if segnalibro is not None and segnalibro.pagina == pagina:
+            self.vista.mostra_rettangolo(segnalibro.rett)  # scorre fino alla parola
 
     def _avvisa_problemi_archivio(self) -> None:
         """Se il file delle note aveva problemi, lo diciamo subito all'utente."""

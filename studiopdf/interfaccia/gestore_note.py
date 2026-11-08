@@ -36,11 +36,24 @@ class GestoreNote:
         menu = QMenu(self.finestra)
         azione_sottolinea = menu.addAction("Sottolinea e spiega…")
         azione_segnalibro = menu.addAction("Segnalibro qui")
-        azione_segnalibro.setEnabled(False)  # arriva più avanti
 
         scelta = menu.exec(posizione)  # mostra il menu e aspetta la scelta (None = nessuna)
         if scelta is azione_sottolinea:
             self.sottolinea(parola)
+        elif scelta is azione_segnalibro:
+            self.metti_segnalibro(parola)
+
+    # =========================================================================
+    # Segnalibro
+    # =========================================================================
+
+    def metti_segnalibro(self, parola: Parola) -> None:
+        """Mette il segnalibro su questa parola (al posto di quello di prima)."""
+        if not self._modificabile():
+            return
+        self.finestra.archivio.imposta_segnalibro(self.finestra.pagina, parola.testo, parola.rett)
+        self._salva_e_ridisegna()
+        self.finestra.statusBar().showMessage(f"Segnalibro messo su «{parola.testo}»", 3000)
 
     # =========================================================================
     # Sottolineature

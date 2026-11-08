@@ -25,7 +25,7 @@ from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView
 
 from studiopdf.documento import Documento
 from studiopdf.interfaccia import disegno
-from studiopdf.note import Pallino, Segnalibro, Sottolineatura
+from studiopdf.note import Pallino, Rett, Segnalibro, Sottolineatura
 from studiopdf.tavolozza import Colore, trova_colore
 
 # Spazio (in pixel) lasciato ai lati della pagina con "adatta alla larghezza".
@@ -50,6 +50,9 @@ class VistaPagina(QGraphicsView):
         super().__init__(parent)
         self.setScene(QGraphicsScene(self))
         self.setBackgroundBrush(COLORE_SFONDO)
+        # Barra di scorrimento verticale sempre presente: così la larghezza utile
+        # non cambia quando compare, e "adatta alla larghezza" resta preciso.
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
 
         # Cosa stiamo mostrando (serve per capire i clic).
         self._documento: Documento | None = None
@@ -125,9 +128,17 @@ class VistaPagina(QGraphicsView):
             x, y = posizioni[pallino.id]
             nuovi.append(disegno.crea_pallino(pallino, x, y, trova_colore(tavolozza, pallino.colore)))
 
+        if segnalibro is not None:
+            nuovi.append(disegno.crea_segnalibro(segnalibro))
+
         for elemento in nuovi:
             scena.addItem(elemento)
         self._elementi_note = nuovi
+
+    def mostra_rettangolo(self, rett: Rett) -> None:
+        """Fa scorrere la vista in modo che il rettangolo (es. una parola) sia al centro."""
+        x0, y0, x1, y1 = rett
+        self.centerOn((x0 + x1) / 2, (y0 + y1) / 2)
 
     # =========================================================================
     # Clic: la logica (separata dagli eventi, così si può provare nei test)
