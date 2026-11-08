@@ -5,6 +5,7 @@ la barra di stato e gli avvisi. Cosa succede quando si clicca una nota
 è deciso da gestore_note.py.
 """
 
+from copy import deepcopy
 from pathlib import Path
 
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -17,9 +18,14 @@ from studiopdf.impostazioni import (
     PREFISSO_PALLINO,
     ErroreImpostazioni,
     Impostazioni,
+    azioni,
     carica_impostazioni,
     salva_impostazioni,
+    tasti_predefiniti,
 )
+from studiopdf.interfaccia.dialogo_percorsi import chiedi_cartella_libri
+from studiopdf.interfaccia.dialogo_tasti import chiedi_tasti
+from studiopdf.interfaccia.menu_config import PulsanteConfig
 from studiopdf.interfaccia.vista_pagina import VistaPagina
 from studiopdf.percorsi import cartella_base
 from studiopdf.tavolozza import carica_tavolozza
@@ -100,10 +106,11 @@ class FinestraPrincipale(QMainWindow):
         azione_esci.triggered.connect(self.close)
 
     def _crea_barra_strumenti(self) -> None:
-        """Pulsanti per sfogliare e zoomare con il mouse."""
+        """Pulsanti per sfogliare e zoomare con il mouse, e il pulsante ⚙ Config."""
         barra = QToolBar("Navigazione", self)
         barra.setMovable(False)
         self.addToolBar(barra)
+        self.barra_strumenti = barra
 
         self.azione_precedente = barra.addAction("◀  Indietro")
         self.azione_successiva = barra.addAction("Avanti  ▶")
@@ -115,6 +122,17 @@ class FinestraPrincipale(QMainWindow):
         self.azione_successiva.triggered.connect(self.pagina_successiva)
         self.azione_rimpicciolisci.triggered.connect(lambda: self.cambia_zoom(-1))
         self.azione_ingrandisci.triggered.connect(lambda: self.cambia_zoom(+1))
+
+        # ⚙ Config, subito dopo «Zoom +».
+        barra.addSeparator()
+        self.pulsante_config = PulsanteConfig(self)
+        barra.addWidget(self.pulsante_config)
+        self.pulsante_config.azione_percorsi.triggered.connect(self.apri_percorsi)
+        self.pulsante_config.azione_tasti.triggered.connect(self.apri_keybinding)
+        # "triggered" arriva solo quando è l'UTENTE a cliccare (non quando il
+        # programma cambia la spunta), così non si creano giri infiniti.
+        self.pulsante_config.azione_frecce.triggered.connect(self._quando_interruttore_frecce)
+        self.pulsante_config.azione_anteprima.triggered.connect(self._quando_interruttore_anteprima)
 
     def _crea_barra_di_stato(self) -> None:
         # A destra, fisso: il numero di pagina. A sinistra: i messaggi brevi.
@@ -218,6 +236,9 @@ class FinestraPrincipale(QMainWindow):
         """
         self.impostazioni = nuove
         self._applica_tasti()
+        # Le spunte del menu Config rispecchiano gli interruttori.
+        self.pulsante_config.azione_frecce.setChecked(nuove.frecce_laterali)
+        self.pulsante_config.azione_anteprima.setChecked(nuove.anteprima_note)
         self.vista.frecce_attive = nuove.frecce_laterali
         self.gestore_note.anteprima_attiva = nuove.anteprima_note
         if not nuove.frecce_laterali:
@@ -233,6 +254,38 @@ class FinestraPrincipale(QMainWindow):
                     "Impostazioni non salvate",
                     f"{errore}\n\nLe impostazioni valgono finché il programma resta aperto.",
                 )
+
+    # --- Voci del menu ⚙ Config ---
+
+    def apri_percorsi(self) -> None:
+        """Finestra «Percorsi»: se l'utente salva, la nuova cartella dei libri vale subito."""
+        cartella = chiedi_cartella_libri(self, self.impostazioni.cartella_libri)
+        if cartella is not None:
+            nuove = deepcopy(self.impostazioni)  # copia: le vecchie restano intatte finché non si applica
+            nuove.cartella_libri = cartella
+            self.applica_impostazioni(nuove)
+
+    def apri_keybinding(self) -> None:
+        """Finestra «Keybinding»: se l'utente salva, i nuovi tasti valgono subito."""
+        tasti = chiedi_tasti(
+            self, azioni(self.tavolozza), self.impostazioni.tasti, tasti_predefiniti(self.tavolozza)
+        )
+        if tasti is not None:
+            nuove = deepcopy(self.impostazioni)
+            nuove.tasti = tasti
+            self.applica_impostazioni(nuove)
+
+    def _quando_interruttore_frecce(self, attivo: bool) -> None:
+        nuove = deepcopy(self.impostazioni)
+        nuove.frecce_laterali = attivo
+        self.applica_impostazioni(nuove)
+
+    def _quando_interruttore_anteprima(self, attivo: bool) -> None:
+        nuove = deepcopy(self.impostazioni)
+        nuove.anteprima_note = attivo
+        self.applica_impostazioni(nuove)
+
+    # --- Scorciatoie ---
 
     def _applica_tasti(self) -> None:
         """Toglie tutte le scorciatoie e le ricrea dai tasti delle impostazioni."""

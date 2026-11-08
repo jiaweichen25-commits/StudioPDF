@@ -13,10 +13,12 @@ import sys
 from PySide6.QtWidgets import QApplication
 
 from studiopdf.interfaccia.finestra import FinestraPrincipale
+from studiopdf.interfaccia.traduzioni import installa_traduzioni_italiane
 
 
 def main() -> None:
     app = QApplication(sys.argv)
+    installa_traduzioni_italiane(app)  # «Sì / No» e gli altri testi di Qt in italiano
 
     finestra = FinestraPrincipale()
     finestra.show()  # prima si mostra, così la finestra conosce le sue dimensioni
