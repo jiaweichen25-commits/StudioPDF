@@ -58,7 +58,6 @@ def crea_sottolineatura(sottolineatura: Sottolineatura) -> list[QGraphicsItem]:
     area_clic.setBrush(QBrush(Qt.BrushStyle.NoBrush))  # nessun riempimento: invisibile
     area_clic.setData(CHIAVE_ID, sottolineatura.id)
     area_clic.setCursor(Qt.CursorShape.PointingHandCursor)  # la "manina" dice: cliccabile
-    area_clic.setToolTip(sottolineatura.spiegazione)  # anteprima passando col mouse
 
     for elemento in (linea, area_clic):
         elemento.setZValue(LIVELLO_NOTE)
@@ -112,7 +111,6 @@ def crea_pallino(pallino: Pallino, x: float, y: float, colore: Colore | None) ->
 
     cerchio.setData(CHIAVE_ID, pallino.id)
     cerchio.setCursor(Qt.CursorShape.PointingHandCursor)
-    cerchio.setToolTip(pallino.testo)
     cerchio.setZValue(LIVELLO_NOTE + 1)  # sopra le sottolineature
     return cerchio
 
@@ -126,6 +124,5 @@ def crea_segnalibro(segnalibro: Segnalibro) -> QGraphicsRectItem:
     evidenziatore = QGraphicsRectItem(QRectF(x0, y0, x1 - x0, y1 - y0))
     evidenziatore.setPen(QPen(Qt.PenStyle.NoPen))
     evidenziatore.setBrush(QBrush(COLORE_SEGNALIBRO))
-    evidenziatore.setToolTip("Mi sono fermato qui")
     evidenziatore.setZValue(LIVELLO_NOTE - 1)  # sotto sottolineature e pallini
     return evidenziatore

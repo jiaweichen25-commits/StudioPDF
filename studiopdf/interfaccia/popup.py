@@ -3,7 +3,16 @@
 from typing import Literal
 
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 # Cosa ha deciso l'utente:
 #   ("salva", "testo scritto")   -> salvare questo testo
@@ -75,5 +84,14 @@ class FinestraNota(QDialog):
         self.accept()  # accept = chiudi il pop-up
 
     def _quando_elimina(self) -> None:
+        if not self.conferma_eliminazione():
+            return  # ci ha ripensato: il pop-up resta aperto
         self.risultato = ("elimina", "")
         self.accept()
+
+    def conferma_eliminazione(self) -> bool:
+        """Chiede "sei sicuro?" prima di eliminare. True = sì."""
+        risposta = QMessageBox.question(
+            self, "Elimina nota", "Eliminare questa nota?\nL'operazione non si può annullare."
+        )
+        return risposta == QMessageBox.StandardButton.Yes

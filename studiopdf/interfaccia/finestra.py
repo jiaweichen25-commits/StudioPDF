@@ -68,6 +68,11 @@ class FinestraPrincipale(QMainWindow):
         self.vista.menuParola.connect(self.gestore_note.quando_menu_parola)
         self.vista.clicNota.connect(self.gestore_note.apri_nota)
         self.vista.clicMargine.connect(self.gestore_note.quando_clic_margine)
+        self.vista.menuNota.connect(self.gestore_note.quando_menu_nota)
+        self.vista.notaSorvolata.connect(self.gestore_note.mostra_anteprima)
+        self.vista.notaLasciata.connect(self.gestore_note.nascondi_anteprima)
+        self.vista.richiestaPaginaPrecedente.connect(self.pagina_precedente)
+        self.vista.richiestaPaginaSuccessiva.connect(self.pagina_successiva)
         self.vista.messaggio.connect(lambda testo: self.statusBar().showMessage(testo, DURATA_MESSAGGI_MS))
 
     def _crea_menu(self) -> None:
@@ -158,6 +163,7 @@ class FinestraPrincipale(QMainWindow):
         self.documento = nuovo_documento
         self.archivio = nuovo_archivio
         self._avvisa_problemi_archivio()
+        self.statusBar().clearMessage()  # via il messaggio "Apri un PDF…"
 
         self.zoom_manuale = False
         self.setWindowTitle(f"{TITOLO} — {self.documento.percorso.name}")

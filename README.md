@@ -14,11 +14,13 @@ Il PDF originale **non viene mai modificato**: le note stanno in un file JSON ac
 | Azione | Come |
 |---|---|
 | Aprire un libro | File → Apri… (`Ctrl+O`), oppure *Apri con…* di Windows |
-| Sfogliare | `←` `→` oppure `PagSu` `PagGiù` |
-| Zoom | `+` `-` oppure `Ctrl` + rotellina |
+| Sfogliare | `←` `→`, `PagSu` `PagGiù`, i pulsanti in alto, oppure le frecce ‹ › che compaiono avvicinando il mouse ai bordi |
+| Zoom | `+` `-`, i pulsanti in alto, oppure `Ctrl` + rotellina |
 | Sottolineare una parola / segnalibro | clic destro sulla parola |
 | Nuovo pallino | clic sinistro nel margine, poi scegli il colore |
-| Leggere / modificare / eliminare una nota | clic sinistro sulla sottolineatura o sul pallino |
+| Leggere una nota | passa il mouse sopra la sottolineatura o il pallino (anteprima) |
+| Modificare una nota | doppio clic sulla sottolineatura o sul pallino |
+| Eliminare una nota | clic destro sulla sottolineatura o sul pallino → Elimina |
 
 I colori dei pallini si cambiano in `config.json` (accanto al programma):
 
@@ -62,7 +64,9 @@ studiopdf/
     vista_pagina.py         la pagina e i clic
     disegno.py              sottolineature, pallini, segnalibro
     gestore_note.py         creare / modificare / eliminare note
-    popup.py                la finestrella delle note
+    popup.py                la finestrella per scrivere le note
+    anteprima.py            la schedina che compare passando il mouse
+    frecce.py               le frecce laterali per sfogliare
 tests/                      test automatici (pytest)
 docs/                       design e piano di implementazione
 ```

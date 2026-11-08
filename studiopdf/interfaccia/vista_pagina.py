@@ -20,11 +20,22 @@ clicca qualcosa, emette un segnale; è gestore_note.py a decidere cosa fare.
 """
 
 from PySide6.QtCore import QPoint, QPointF, Qt, Signal
-from PySide6.QtGui import QColor, QContextMenuEvent, QImage, QMouseEvent, QPixmap, QTransform, QWheelEvent
+from PySide6.QtGui import (
+    QColor,
+    QContextMenuEvent,
+    QCursor,
+    QImage,
+    QMouseEvent,
+    QPixmap,
+    QResizeEvent,
+    QTransform,
+    QWheelEvent,
+)
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView
 
 from studiopdf.documento import Documento
-from studiopdf.interfaccia import disegno
+from studiopdf.interfaccia import disegno, frecce
+from studiopdf.interfaccia.frecce import FrecciaLaterale
 from studiopdf.note import Pallino, Rett, Segnalibro, Sottolineatura
 from studiopdf.tavolozza import Colore, trova_colore
 
@@ -42,7 +53,12 @@ class VistaPagina(QGraphicsView):
 
     zoomRichiesto = Signal(int)  # Ctrl+rotellina: +1 ingrandisci, -1 rimpicciolisci
     menuParola = Signal(object, QPoint)  # clic destro su una parola: (Parola, posizione sullo schermo)
-    clicNota = Signal(str)  # clic sinistro su una nota: id della nota
+    menuNota = Signal(str, QPoint)  # clic destro su una nota: (id, posizione sullo schermo)
+    clicNota = Signal(str)  # DOPPIO clic su una nota: id della nota (per modificarla)
+    notaSorvolata = Signal(str, QPoint)  # il mouse è appena arrivato su una nota: (id, posizione sullo schermo)
+    notaLasciata = Signal()  # il mouse ha lasciato la nota
+    richiestaPaginaPrecedente = Signal()  # clic sulla freccia ‹
+    richiestaPaginaSuccessiva = Signal()  # clic sulla freccia ›
     clicMargine = Signal(str, float, QPoint)  # clic nel margine: (lato "sx"/"dx", y in punti PDF, posizione sullo schermo)
     messaggio = Signal(str)  # un breve messaggio per la barra di stato
 
@@ -61,6 +77,19 @@ class VistaPagina(QGraphicsView):
         # Gli elementi grafici delle note attualmente nella scena.
         self._elementi_note: list[QGraphicsItem] = []
 
+        # La nota su cui si trova il mouse in questo momento (None = nessuna).
+        self._nota_sorvolata: str | None = None
+        # Senza "mouse tracking" Qt segnala i movimenti solo a pulsante premuto:
+        # a noi servono sempre, per l'anteprima e per le frecce.
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+
+        # Le frecce laterali (figlie della vista, quindi disegnate sopra la pagina).
+        self.freccia_sinistra = FrecciaLaterale("‹", "Pagina precedente", self)
+        self.freccia_destra = FrecciaLaterale("›", "Pagina successiva", self)
+        self.freccia_sinistra.clicked.connect(self.richiestaPaginaPrecedente.emit)
+        self.freccia_destra.clicked.connect(self.richiestaPaginaSuccessiva.emit)
+
     # =========================================================================
     # Mostrare una pagina
     # =========================================================================
@@ -77,6 +106,7 @@ class VistaPagina(QGraphicsView):
 
         self._documento = documento
         self._pagina = pagina
+        self._lascia_nota_sorvolata()  # le note stanno per essere ridisegnate
 
         scena = self.scene()
         scena.clear()  # toglie tutto, comprese le note...
@@ -107,6 +137,10 @@ class VistaPagina(QGraphicsView):
         else:
             self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())  # pagina nuova: dall'alto
 
+        # Pagina cambiata: le frecce disponibili potrebbero essere cambiate
+        # (es. arrivati all'ultima pagina, la freccia › non serve più).
+        self.aggiorna_frecce(self.viewport().mapFromGlobal(QCursor.pos()))
+
     def zoom_larghezza(self, documento: Documento, pagina: int) -> float:
         """Lo zoom con cui la pagina riempie la larghezza della vista."""
         larghezza_pagina, _ = documento.dimensione_pagina(pagina)
@@ -125,6 +159,7 @@ class VistaPagina(QGraphicsView):
         documento: Documento,
     ) -> None:
         """Toglie le note disegnate prima e disegna quelle indicate."""
+        self._lascia_nota_sorvolata()
         scena = self.scene()
         for elemento in self._elementi_note:
             scena.removeItem(elemento)
@@ -155,8 +190,16 @@ class VistaPagina(QGraphicsView):
     # =========================================================================
 
     def gestisci_clic_destro(self, punto: QPointF, posizione_schermo: QPoint) -> None:
-        """Clic destro nel punto (in coordinate PDF): se c'è una parola, chiede il menu."""
+        """Clic destro nel punto (in coordinate PDF).
+
+        Su una nota -> menu della nota (modifica / elimina).
+        Su una parola -> menu della parola (sottolinea / segnalibro).
+        """
         if self._documento is None:
+            return
+        id_nota = self._id_nota_in(punto)
+        if id_nota is not None:
+            self.menuNota.emit(id_nota, posizione_schermo)
             return
         parola = self._documento.parola_in(self._pagina, punto.x(), punto.y())
         if parola is None:
@@ -169,10 +212,9 @@ class VistaPagina(QGraphicsView):
 
         Restituisce True se il clic è stato "usato" (su una nota o nel margine).
         """
-        # 1) Su una nota esistente? Allora si apre quella nota.
-        id_nota = self._id_nota_in(punto)
-        if id_nota is not None:
-            self.clicNota.emit(id_nota)
+        # 1) Su una nota esistente? Il clic singolo non fa niente: per leggere
+        #    c'è l'anteprima, per modificare il doppio clic.
+        if self._id_nota_in(punto) is not None:
             return True
 
         # 2) Nel margine della pagina? Allora si vuole un pallino nuovo.
@@ -183,6 +225,64 @@ class VistaPagina(QGraphicsView):
             self.clicMargine.emit(lato, punto.y(), posizione_schermo)
             return True
         return False
+
+    def gestisci_doppio_clic(self, punto: QPointF) -> bool:
+        """Doppio clic nel punto (in coordinate PDF): su una nota, la apre per modificarla."""
+        id_nota = self._id_nota_in(punto)
+        if id_nota is None:
+            return False
+        self._lascia_nota_sorvolata()  # l'anteprima sparisce, arriva il pop-up
+        self.clicNota.emit(id_nota)
+        return True
+
+    # =========================================================================
+    # Movimento del mouse: anteprima delle note e frecce laterali
+    # =========================================================================
+
+    def gestisci_movimento(self, punto: QPointF, posizione_vista: QPoint, posizione_schermo: QPoint) -> None:
+        """Il mouse si è mosso.
+
+        punto             = dove si trova sulla pagina (coordinate PDF)
+        posizione_vista   = dove si trova nella vista (pixel), per le frecce
+        posizione_schermo = dove si trova sullo schermo, per posizionare l'anteprima
+        """
+        id_nota = self._id_nota_in(punto)
+        if id_nota != self._nota_sorvolata:  # avvisiamo solo quando CAMBIA qualcosa
+            self._lascia_nota_sorvolata()
+            if id_nota is not None:
+                self._nota_sorvolata = id_nota
+                self.notaSorvolata.emit(id_nota, posizione_schermo)
+        self.aggiorna_frecce(posizione_vista)
+
+    def aggiorna_frecce(self, posizione_vista: QPoint) -> None:
+        """Mostra la freccia ‹ o › se il mouse è vicino a quel bordo e la pagina esiste."""
+        vicino_a_sinistra = posizione_vista.x() < frecce.ZONA_SENSIBILE
+        vicino_a_destra = posizione_vista.x() > self.viewport().width() - frecce.ZONA_SENSIBILE
+
+        esiste_precedente = self._documento is not None and self._pagina > 1
+        esiste_successiva = self._documento is not None and self._pagina < self._documento.numero_pagine
+
+        self.freccia_sinistra.setVisible(vicino_a_sinistra and esiste_precedente)
+        self.freccia_destra.setVisible(vicino_a_destra and esiste_successiva)
+
+    def nascondi_frecce(self) -> None:
+        self.freccia_sinistra.hide()
+        self.freccia_destra.hide()
+
+    def _lascia_nota_sorvolata(self) -> None:
+        """Se il mouse era su una nota, avvisa che non lo è più."""
+        if self._nota_sorvolata is not None:
+            self._nota_sorvolata = None
+            self.notaLasciata.emit()
+
+    def _posiziona_frecce(self) -> None:
+        """Mette le frecce a metà altezza, sui bordi sinistro e destro dell'area della pagina."""
+        area = self.viewport().geometry()  # in coordinate della vista
+        y = area.center().y() - frecce.ALTEZZA // 2
+        self.freccia_sinistra.move(area.left() + frecce.DISTANZA_DAL_BORDO, y)
+        self.freccia_destra.move(area.right() - frecce.DISTANZA_DAL_BORDO - frecce.LARGHEZZA + 1, y)
+        self.freccia_sinistra.raise_()  # sopra la pagina
+        self.freccia_destra.raise_()
 
     def _dentro_la_pagina(self, punto: QPointF) -> bool:
         larghezza, altezza = self._documento.dimensione_pagina(self._pagina)
@@ -199,6 +299,28 @@ class VistaPagina(QGraphicsView):
     # =========================================================================
     # Eventi di Qt (mouse): convertono la posizione e chiamano la logica sopra
     # =========================================================================
+
+    def mouseMoveEvent(self, evento: QMouseEvent) -> None:
+        punto_vista = evento.position().toPoint()
+        self.gestisci_movimento(self.mapToScene(punto_vista), punto_vista, evento.globalPosition().toPoint())
+        super().mouseMoveEvent(evento)
+
+    def mouseDoubleClickEvent(self, evento: QMouseEvent) -> None:
+        if evento.button() == Qt.MouseButton.LeftButton:
+            if self.gestisci_doppio_clic(self.mapToScene(evento.position().toPoint())):
+                evento.accept()
+                return
+        super().mouseDoubleClickEvent(evento)
+
+    def leaveEvent(self, evento) -> None:
+        """Il mouse è uscito dalla vista: via anteprima e frecce."""
+        self._lascia_nota_sorvolata()
+        self.nascondi_frecce()
+        super().leaveEvent(evento)
+
+    def resizeEvent(self, evento: QResizeEvent) -> None:
+        super().resizeEvent(evento)
+        self._posiziona_frecce()
 
     def contextMenuEvent(self, evento: QContextMenuEvent) -> None:
         self.gestisci_clic_destro(self.mapToScene(evento.pos()), evento.globalPos())

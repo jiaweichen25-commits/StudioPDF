@@ -5,13 +5,16 @@ questo modulo decide cosa fare: mostrare un menu, aprire il pop-up,
 aggiornare l'archivio, salvare e ridisegnare.
 """
 
+import html
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QColor, QIcon, QPixmap
-from PySide6.QtWidgets import QMenu
+from PySide6.QtWidgets import QMenu, QMessageBox
 
 from studiopdf.documento import Parola
+from studiopdf.interfaccia import disegno
+from studiopdf.interfaccia.anteprima import AnteprimaNota
 from studiopdf.interfaccia.popup import RisultatoPopup, chiedi_nota
 from studiopdf.note import Sottolineatura
 from studiopdf.tavolozza import Colore, trova_colore
@@ -27,6 +30,72 @@ class GestoreNote:
         # Dalla finestra prendiamo: archivio, documento, pagina corrente,
         # ridisegna(), avvisa() e la barra di stato.
         self.finestra = finestra
+
+        # La schedina che compare passando il mouse su una nota.
+        self.anteprima = AnteprimaNota(finestra)
+
+    # =========================================================================
+    # Anteprima (mouse sopra una nota)
+    # =========================================================================
+
+    def mostra_anteprima(self, id: str, posizione: QPoint) -> None:
+        """Mostra titolo e testo della nota in una schedina vicino al mouse."""
+        archivio = self.finestra.archivio
+        if archivio is None:
+            return
+        try:
+            nota = archivio.trova(id)
+        except KeyError:
+            return
+
+        # html.escape evita che caratteri come < o & nel testo rompano il titolo (che è HTML).
+        if isinstance(nota, Sottolineatura):
+            titolo, testo = f"«{html.escape(nota.parola)}»", nota.spiegazione
+        else:
+            titolo, testo = self._titolo_pallino_html(nota.colore), nota.testo
+        self.anteprima.mostra(titolo, testo, posizione)
+
+    def nascondi_anteprima(self) -> None:
+        self.anteprima.hide()
+
+    # =========================================================================
+    # Menu del clic destro su una nota
+    # =========================================================================
+
+    def quando_menu_nota(self, id: str, posizione: QPoint) -> None:
+        self.nascondi_anteprima()
+        menu = QMenu(self.finestra)
+        azione_modifica = menu.addAction("Modifica…")
+        menu.addSeparator()
+        azione_elimina = menu.addAction("Elimina")
+
+        scelta = menu.exec(posizione)
+        if scelta is azione_modifica:
+            self.apri_nota(id)
+        elif scelta is azione_elimina:
+            self.elimina_nota(id)
+
+    def elimina_nota(self, id: str) -> None:
+        """Elimina una nota, dopo aver chiesto conferma."""
+        if not self._modificabile():
+            return
+        try:
+            nota = self.finestra.archivio.trova(id)
+        except KeyError:
+            return
+
+        if isinstance(nota, Sottolineatura):
+            domanda = f"Eliminare la sottolineatura di «{nota.parola}»?"
+        else:
+            domanda = f"Eliminare il pallino «{self._titolo_pallino(nota.colore)}»?"
+        if self.conferma(domanda + "\nL'operazione non si può annullare."):
+            self.finestra.archivio.elimina(id)
+            self._salva_e_ridisegna()
+
+    def conferma(self, domanda: str) -> bool:
+        """Chiede sì/no all'utente. È un metodo a parte così i test possono sostituirlo."""
+        risposta = QMessageBox.question(self.finestra, "Elimina nota", domanda)
+        return risposta == QMessageBox.StandardButton.Yes
 
     # =========================================================================
     # Menu del clic destro su una parola
@@ -111,6 +180,7 @@ class GestoreNote:
 
     def apri_nota(self, id: str) -> None:
         """Mostra la nota nel pop-up; l'utente può modificarla o eliminarla."""
+        self.nascondi_anteprima()
         if not self._modificabile():
             return
         archivio = self.finestra.archivio
@@ -141,6 +211,13 @@ class GestoreNote:
     def chiedi(self, titolo: str, testo: str = "", eliminabile: bool = False) -> RisultatoPopup:
         """Apre il pop-up. È un metodo a parte così i test possono sostituirlo."""
         return chiedi_nota(self.finestra, titolo, testo, eliminabile)
+
+    def _titolo_pallino_html(self, nome_colore: str) -> str:
+        """Come _titolo_pallino, ma con il pallino colorato (per l'anteprima, che accetta HTML)."""
+        colore = trova_colore(self.finestra.tavolozza, nome_colore)
+        codice = colore.colore if colore else disegno.COLORE_SCONOSCIUTO
+        significato = colore.significato if colore else nome_colore
+        return f'<span style="color:{codice}">●</span> {html.escape(significato)}'
 
     def _titolo_pallino(self, nome_colore: str) -> str:
         """Titolo del pop-up di un pallino: il SIGNIFICATO del colore (es. "● da ripassare")."""

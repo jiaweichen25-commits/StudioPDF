@@ -13,3 +13,6 @@ dist/
 
 # file generato da PyInstaller (il comando di build è nel README)
 StudioPDF.spec
+
+# tavolozza personale (creata al primo avvio)
+config.json
