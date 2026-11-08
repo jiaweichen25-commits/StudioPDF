@@ -1,0 +1,4 @@
+pymupdf
+PySide6
+pytest
+pyinstaller

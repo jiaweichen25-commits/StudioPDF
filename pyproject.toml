@@ -1,0 +1,6 @@
+# Impostazioni per pytest.
+# "pythonpath" fa sì che i test trovino il pacchetto "studiopdf"
+# quando si lancia "python -m pytest" dalla cartella principale.
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

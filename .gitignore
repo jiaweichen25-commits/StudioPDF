@@ -10,6 +10,5 @@ __pycache__/
 build/
 dist/
 
-# istruzioni e impostazioni locali di Claude Code (private)
-CLAUDE.md
+# impostazioni locali di Claude Code
 .claude/
