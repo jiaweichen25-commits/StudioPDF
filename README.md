@@ -95,3 +95,7 @@ studiopdf/
 tests/                      test automatici (pytest)
 docs/                       design e piano di implementazione
 ```
+
+## Licenza
+
+StudioPDF è distribuito con licenza **GNU AGPL-3.0** (vedi il file `LICENSE`), la stessa di [PyMuPDF](https://github.com/pymupdf/PyMuPDF), che il programma usa per leggere i PDF.
