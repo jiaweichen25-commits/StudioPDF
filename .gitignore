@@ -1,0 +1,20 @@
+# ambiente virtuale Python
+.venv/
+
+# file generati da Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# file generati da PyInstaller
+build/
+dist/
+
+# file generati da Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# file generati da PyInstaller
+build/
+dist/
