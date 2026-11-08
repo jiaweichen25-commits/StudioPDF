@@ -9,3 +9,7 @@ __pycache__/
 # file generati da PyInstaller
 build/
 dist/
+
+# istruzioni e impostazioni locali di Claude Code (private)
+CLAUDE.md
+.claude/
