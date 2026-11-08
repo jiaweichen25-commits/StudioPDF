@@ -9,7 +9,7 @@ Una tabella con una riga per azione e due caselle per i tasti:
 
 Si clicca su una casella e si preme il tasto (o la combinazione, es. Ctrl+W).
 La ✕ nella casella la svuota. Se lo stesso tasto finisce su due azioni,
-le righe diventano rosse e «Salva» si disattiva finché non si sistema.
+il nome di quelle azioni diventa rosso e «Salva» si disattiva finché non si sistema.
 """
 
 from PySide6.QtCore import Qt
@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 
 from studiopdf.impostazioni import TASTI_PER_AZIONE, trova_conflitti
 
-COLORE_CONFLITTO = QColor("#FADBD8")  # rosa chiaro per le righe in conflitto
+COLORE_CONFLITTO = QColor("#FADBD8")  # rosa chiaro per il nome delle azioni in conflitto
 
 
 def chiedi_tasti(
@@ -139,7 +139,7 @@ class DialogoTasti(QDialog):
         }
 
     def _aggiorna_conflitti(self) -> None:
-        """Colora di rosso le righe con tasti doppi e disattiva «Salva» se ce ne sono."""
+        """Colora di rosso il nome delle azioni con tasti doppi e disattiva «Salva» se ce ne sono."""
         conflitti = trova_conflitti(self.tasti_correnti())
         azioni_in_conflitto = {azione for elenco in conflitti.values() for azione in elenco}
 

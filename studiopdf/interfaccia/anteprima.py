@@ -6,6 +6,7 @@ mouse si allontana. Serve solo a LEGGERE: per modificare si fa doppio clic.
 """
 
 from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
 # Larghezza massima della schedina, in pixel: i testi lunghi vanno a capo.
@@ -63,6 +64,27 @@ class AnteprimaNota(QFrame):
         self.etichetta_titolo.setText(titolo_html)
         self.etichetta_testo.setText(testo)
         self.adjustSize()  # ricalcola la dimensione in base al nuovo testo
-        self.move(posizione_schermo + DISTANZA_DAL_PUNTATORE)
+        self.move(self._posizione_dentro_lo_schermo(posizione_schermo))
         self.show()
         self.raise_()  # sopra le altre finestre
+
+    def _posizione_dentro_lo_schermo(self, puntatore: QPoint) -> QPoint:
+        """Dove mettere la schedina: in basso a destra del puntatore, ma sempre dentro lo schermo.
+
+        Se a destra (o sotto) non c'è spazio, la schedina passa a sinistra (o sopra) del puntatore.
+        """
+        schermo = QGuiApplication.screenAt(puntatore) or QGuiApplication.primaryScreen()
+        area = schermo.availableGeometry()  # lo schermo senza la barra delle applicazioni
+        larghezza, altezza = self.width(), self.height()
+
+        x = puntatore.x() + DISTANZA_DAL_PUNTATORE.x()
+        y = puntatore.y() + DISTANZA_DAL_PUNTATORE.y()
+        if x + larghezza > area.right():
+            x = puntatore.x() - DISTANZA_DAL_PUNTATORE.x() - larghezza
+        if y + altezza > area.bottom():
+            y = puntatore.y() - DISTANZA_DAL_PUNTATORE.y() - altezza
+
+        # Ultima sicurezza: mai fuori dai bordi.
+        x = max(area.left(), min(x, area.right() - larghezza + 1))
+        y = max(area.top(), min(y, area.bottom() - altezza + 1))
+        return QPoint(x, y)

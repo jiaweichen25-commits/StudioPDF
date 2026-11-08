@@ -12,7 +12,12 @@ si sceglie una voce lo decide la finestra principale.
 """
 
 from PySide6.QtCore import QTimer
+from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QMenu, QToolButton, QWidget
+
+# Quanto deve restare il mouse sul pulsante prima che il menu si apra (ms):
+# così passarci sopra di corsa, andando altrove, non apre niente.
+ATTESA_APERTURA_MS = 250
 
 
 class PulsanteConfig(QToolButton):
@@ -35,13 +40,41 @@ class PulsanteConfig(QToolButton):
         # InstantPopup = il menu si apre subito al clic (senza la freccetta a lato).
         self.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
 
-    def enterEvent(self, evento) -> None:
-        """Il mouse è arrivato sopra il pulsante: apriamo il menu.
+        # Timer per l'apertura "al passaggio del mouse", con un piccolo ritardo.
+        self.attesa_apertura = QTimer(self)
+        self.attesa_apertura.setSingleShot(True)
+        self.attesa_apertura.setInterval(ATTESA_APERTURA_MS)
+        self.attesa_apertura.timeout.connect(self._apri_se_ancora_sopra)
 
-        QTimer.singleShot(0, ...) apre il menu "appena possibile", cioè dopo
-        che Qt ha finito di gestire questo evento (aprirlo subito, da dentro
-        l'evento, può dare problemi).
-        """
+        # True se il menu è appena stato chiuso con il mouse ancora sul pulsante:
+        # in quel caso NON va riaperto finché il mouse non esce e rientra.
+        self._appena_chiuso = False
+        menu.aboutToHide.connect(self._quando_menu_si_chiude)
+
+    # --- Eventi del mouse ---
+
+    def enterEvent(self, evento) -> None:
+        """Il mouse è arrivato sul pulsante: dopo un attimo si apre il menu."""
         super().enterEvent(evento)
-        if not self.menu().isVisible():
-            QTimer.singleShot(0, self.showMenu)
+        if self._appena_chiuso or self.menu().isVisible():
+            return
+        self.attesa_apertura.start()
+
+    def leaveEvent(self, evento) -> None:
+        """Il mouse è uscito: niente apertura in sospeso, e la prossima volta si riapre."""
+        super().leaveEvent(evento)
+        self.attesa_apertura.stop()
+        self._appena_chiuso = False
+
+    # --- Funzioni di aiuto ---
+
+    def _apri_se_ancora_sopra(self) -> None:
+        if self._mouse_sopra() and not self.menu().isVisible():
+            self.showMenu()
+
+    def _quando_menu_si_chiude(self) -> None:
+        self._appena_chiuso = self._mouse_sopra()
+
+    def _mouse_sopra(self) -> bool:
+        """Il puntatore è sopra il pulsante?"""
+        return self.rect().contains(self.mapFromGlobal(QCursor.pos()))

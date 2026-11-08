@@ -35,7 +35,6 @@ from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView
 
 from studiopdf.documento import Documento
 from studiopdf.interfaccia import disegno, frecce
-from studiopdf.interfaccia.frecce import FrecciaLaterale
 from studiopdf.note import Pallino, Rett, Segnalibro, Sottolineatura
 from studiopdf.tavolozza import Colore, trova_colore
 
@@ -88,8 +87,8 @@ class VistaPagina(QGraphicsView):
         self.viewport().setMouseTracking(True)
 
         # Le frecce laterali (figlie della vista, quindi disegnate sopra la pagina).
-        self.freccia_sinistra = FrecciaLaterale("‹", "Pagina precedente", self)
-        self.freccia_destra = FrecciaLaterale("›", "Pagina successiva", self)
+        self.freccia_sinistra = frecce.FrecciaLaterale("‹", "Pagina precedente", self)
+        self.freccia_destra = frecce.FrecciaLaterale("›", "Pagina successiva", self)
         self.freccia_sinistra.clicked.connect(self.richiestaPaginaPrecedente.emit)
         self.freccia_destra.clicked.connect(self.richiestaPaginaSuccessiva.emit)
 
@@ -259,7 +258,8 @@ class VistaPagina(QGraphicsView):
 
     def aggiorna_frecce(self, posizione_vista: QPoint) -> None:
         """Mostra la freccia ‹ o › se il mouse è vicino a quel bordo e la pagina esiste."""
-        if not self.frecce_attive:
+        # Spente dal menu Config, oppure mouse fuori dalla pagina (es. sulla barra in alto).
+        if not self.frecce_attive or not self.viewport().rect().contains(posizione_vista):
             self.nascondi_frecce()
             return
         vicino_a_sinistra = posizione_vista.x() < frecce.ZONA_SENSIBILE

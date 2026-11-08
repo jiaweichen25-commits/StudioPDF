@@ -104,13 +104,28 @@ def carica_impostazioni(cartella: Path, tavolozza: list[Colore]) -> Impostazioni
     tasti_salvati = _sezione(dati, "tasti")
     opzioni = _sezione(dati, "opzioni")
 
-    # Tasti: per ogni azione, quelli salvati se validi, altrimenti i predefiniti.
-    tasti = tasti_predefiniti(tavolozza)
-    for azione in tasti:
+    # Tasti, in due passaggi:
+    # 1) quelli salvati (se validi) hanno la precedenza;
+    predefiniti = tasti_predefiniti(tavolozza)
+    tasti: dict[str, list[str]] = {}
+    for azione in predefiniti:
         valore = tasti_salvati.get(azione)
         if _tasti_validi(valore):
             # Completa fino a due caselle: ["D"] -> ["D", ""]
             tasti[azione] = (list(valore) + [""] * TASTI_PER_AZIONE)[:TASTI_PER_AZIONE]
+
+    # 2) le azioni senza tasti salvati (es. un colore appena aggiunto alla tavolozza)
+    #    ricevono i predefiniti, ma SOLO se quei tasti sono ancora liberi: altrimenti
+    #    due azioni avrebbero lo stesso tasto e nessuna delle due funzionerebbe.
+    occupati = {tasto.upper() for coppia in tasti.values() for tasto in coppia if tasto.strip()}
+    for azione, coppia in predefiniti.items():
+        if azione in tasti:
+            continue
+        liberi = [tasto if tasto and tasto.upper() not in occupati else "" for tasto in coppia]
+        occupati.update(tasto.upper() for tasto in liberi if tasto)
+        tasti[azione] = liberi
+
+    tasti = {azione: tasti[azione] for azione in predefiniti}  # stesso ordine delle azioni
 
     return Impostazioni(
         cartella_libri=_testo_o(percorsi.get("cartella_libri"), ""),
@@ -200,7 +215,10 @@ def salva_impostazioni(cartella: Path, impostazioni: Impostazioni) -> None:
 
 
 def trova_conflitti(tasti: dict[str, list[str]]) -> dict[str, list[str]]:
-    """I tasti usati da più di un'azione: {TASTO: [azioni che lo usano]}.
+    """I tasti usati più di una volta: {TASTO: [azioni che lo usano]}.
+
+    Conta anche lo stesso tasto messo in entrambe le caselle di un'azione
+    (in quel caso l'azione compare due volte nell'elenco).
 
     Il confronto ignora maiuscole e minuscole ("d" e "D" sono lo stesso tasto).
     Le caselle vuote non contano.

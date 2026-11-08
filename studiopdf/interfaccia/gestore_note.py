@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QColor, QIcon, QPixmap
-from PySide6.QtWidgets import QMenu, QMessageBox
+from PySide6.QtWidgets import QMenu
 
 from studiopdf.documento import Parola
 from studiopdf.interfaccia import disegno
 from studiopdf.interfaccia.anteprima import AnteprimaNota
-from studiopdf.interfaccia.popup import RisultatoPopup, chiedi_nota
+from studiopdf.interfaccia.popup import RisultatoPopup, chiedi_conferma, chiedi_nota
 from studiopdf.note import Sottolineatura
 from studiopdf.tavolozza import Colore, trova_colore
 
@@ -27,8 +27,8 @@ if TYPE_CHECKING:
 
 class GestoreNote:
     def __init__(self, finestra: "FinestraPrincipale") -> None:
-        # Dalla finestra prendiamo: archivio, documento, pagina corrente,
-        # ridisegna(), avvisa() e la barra di stato.
+        # Dalla finestra prendiamo: archivio, documento, pagina corrente, vista,
+        # tavolozza, ridisegna_note(), avvisa() e la barra di stato.
         self.finestra = finestra
 
         # La schedina che compare passando il mouse su una nota.
@@ -96,8 +96,7 @@ class GestoreNote:
 
     def conferma(self, domanda: str) -> bool:
         """Chiede sì/no all'utente. È un metodo a parte così i test possono sostituirlo."""
-        risposta = QMessageBox.question(self.finestra, "Elimina nota", domanda)
-        return risposta == QMessageBox.StandardButton.Yes
+        return chiedi_conferma(self.finestra, "Elimina nota", domanda)
 
     # =========================================================================
     # Menu del clic destro su una parola
@@ -191,7 +190,7 @@ class GestoreNote:
             self._salva_e_ridisegna()
 
     # =========================================================================
-    # Aprire una nota esistente (clic sinistro su sottolineatura o pallino)
+    # Aprire una nota esistente (doppio clic, o «Modifica…» dal clic destro)
     # =========================================================================
 
     def apri_nota(self, id: str) -> None:

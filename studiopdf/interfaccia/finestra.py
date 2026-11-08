@@ -8,12 +8,12 @@ la barra di stato e gli avvisi. Cosa succede quando si clicca una nota
 from copy import deepcopy
 from pathlib import Path
 
+from PySide6.QtCore import QEvent
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QFileDialog, QLabel, QMainWindow, QMessageBox, QToolBar
 
 from studiopdf.archivio import Archivio
 from studiopdf.documento import Documento, ErroreDocumento
-from studiopdf.interfaccia.gestore_note import GestoreNote
 from studiopdf.impostazioni import (
     PREFISSO_PALLINO,
     ErroreImpostazioni,
@@ -25,6 +25,7 @@ from studiopdf.impostazioni import (
 )
 from studiopdf.interfaccia.dialogo_percorsi import chiedi_cartella_libri
 from studiopdf.interfaccia.dialogo_tasti import chiedi_tasti
+from studiopdf.interfaccia.gestore_note import GestoreNote
 from studiopdf.interfaccia.menu_config import PulsanteConfig
 from studiopdf.interfaccia.vista_pagina import VistaPagina
 from studiopdf.percorsi import cartella_base
@@ -61,6 +62,8 @@ class FinestraPrincipale(QMainWindow):
 
         # Le scorciatoie da tastiera attive: azione -> elenco di QShortcut.
         self.scorciatoie: dict[str, list[QShortcut]] = {}
+        # Se config.json non si può salvare lo diciamo UNA volta, non a ogni clic.
+        self._avvisato_salvataggio_impostazioni = False
 
         # --- La vista della pagina occupa tutta la finestra ---
         self.vista = VistaPagina(self)
@@ -250,10 +253,12 @@ class FinestraPrincipale(QMainWindow):
             try:
                 salva_impostazioni(cartella_base(), nuove)
             except (ErroreImpostazioni, OSError) as errore:
-                self.avvisa(
-                    "Impostazioni non salvate",
-                    f"{errore}\n\nLe impostazioni valgono finché il programma resta aperto.",
-                )
+                if not self._avvisato_salvataggio_impostazioni:
+                    self._avvisato_salvataggio_impostazioni = True
+                    self.avvisa(
+                        "Impostazioni non salvate",
+                        f"{errore}\n\nLe impostazioni valgono finché il programma resta aperto.",
+                    )
 
     # --- Voci del menu ⚙ Config ---
 
@@ -379,6 +384,12 @@ class FinestraPrincipale(QMainWindow):
     def avvisa(self, titolo: str, testo: str) -> None:
         """Mostra un messaggio di avviso (finestrella con OK)."""
         QMessageBox.warning(self, titolo, testo)
+
+    def changeEvent(self, evento) -> None:
+        """Se la finestra non è più quella attiva (es. Alt+Tab), via l'anteprima delle note."""
+        super().changeEvent(evento)
+        if evento.type() == QEvent.Type.ActivationChange and not self.isActiveWindow():
+            self.gestore_note.nascondi_anteprima()
 
     def resizeEvent(self, evento) -> None:
         """Quando la finestra cambia dimensione, la pagina si riadatta alla larghezza."""

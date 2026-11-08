@@ -21,6 +21,22 @@ from PySide6.QtWidgets import (
 RisultatoPopup = tuple[Literal["salva", "elimina"], str] | None
 
 
+def crea_domanda_conferma(genitore: QWidget | None, titolo: str, testo: str) -> QMessageBox:
+    """Una domanda Sì/No in cui il pulsante già selezionato è «No».
+
+    Così premere Invio per sbaglio NON elimina niente.
+    """
+    domanda = QMessageBox(QMessageBox.Icon.Question, titolo, testo, parent=genitore)
+    domanda.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+    domanda.setDefaultButton(QMessageBox.StandardButton.No)
+    return domanda
+
+
+def chiedi_conferma(genitore: QWidget | None, titolo: str, testo: str) -> bool:
+    """Mostra la domanda e restituisce True solo se l'utente sceglie «Sì»."""
+    return crea_domanda_conferma(genitore, titolo, testo).exec() == QMessageBox.StandardButton.Yes
+
+
 def chiedi_nota(genitore: QWidget | None, titolo: str, testo: str = "", eliminabile: bool = False) -> RisultatoPopup:
     """Mostra il pop-up, aspetta che l'utente scelga e restituisce la sua scelta."""
     popup = FinestraNota(genitore, titolo, testo, eliminabile)
@@ -91,7 +107,4 @@ class FinestraNota(QDialog):
 
     def conferma_eliminazione(self) -> bool:
         """Chiede "sei sicuro?" prima di eliminare. True = sì."""
-        risposta = QMessageBox.question(
-            self, "Elimina nota", "Eliminare questa nota?\nL'operazione non si può annullare."
-        )
-        return risposta == QMessageBox.StandardButton.Yes
+        return chiedi_conferma(self, "Elimina nota", "Eliminare questa nota?\nL'operazione non si può annullare.")
