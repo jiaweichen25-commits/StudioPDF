@@ -16,3 +16,7 @@ StudioPDF.spec
 
 # tavolozza personale (creata al primo avvio)
 config.json
+
+# file di lavoro locali (non pubblicati)
+.superpowers/
+tests/
