@@ -18,5 +18,5 @@ StudioPDF.spec
 config.json
 
 # file di lavoro locali (non pubblicati)
-.superpowers/
+.superpowers/sdd
 tests/
