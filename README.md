@@ -58,7 +58,6 @@ python -m venv .venv
 pip install -r requirements.txt
 
 python main.py                 # avvia il programma
-python -m pytest               # lancia i test
 ```
 
 ### Creare l'eseguibile Windows
@@ -92,7 +91,6 @@ studiopdf/
     dialogo_percorsi.py     la finestra «Percorsi»
     dialogo_tasti.py        la finestra «Keybinding»
     traduzioni.py           i testi di Qt in italiano
-tests/                      test automatici (pytest)
 docs/                       design e piano di implementazione
 ```
 
