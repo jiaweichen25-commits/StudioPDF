@@ -37,6 +37,11 @@ class Parola:
 
     testo: str  # già pulito dalla punteggiatura
     rett: Rett  # posizione sulla pagina, in punti PDF
+    # In quale riga del PDF si trova: (numero del blocco, numero della riga nel blocco),
+    # come li numera PyMuPDF. Serve solo a capire se due parole stanno sulla stessa
+    # riga (vedi rettangoli_per_riga). Ha un valore di partenza così nei test si può
+    # scrivere semplicemente Parola("ciao", (0, 0, 1, 1)).
+    riga: tuple[int, int] = (0, 0)
 
 
 class ErroreDocumento(Exception):
@@ -50,6 +55,37 @@ def pulisci(testo: str) -> str:
     L'apostrofo in mezzo resta: "l'arco" -> "l'arco".
     """
     return _PUNTEGGIATURA_AI_BORDI.sub("", testo)
+
+
+def testo_frase(parole: list[Parola]) -> str:
+    """Il testo di una frase: le sue parole separate da uno spazio.
+
+    Esempio: [Parola("Una"), Parola("serie")] -> "Una serie"
+    """
+    return " ".join(parola.testo for parola in parole)
+
+
+def rettangoli_per_riga(parole: list[Parola]) -> list[Rett]:
+    """Un rettangolo per ogni riga della frase, nell'ordine di lettura.
+
+    Le parole devono essere già in ordine di lettura (come le dà Documento.parole).
+    Le parole di fila che stanno sulla stessa riga vengono "fuse" in un unico
+    rettangolo che le contiene tutte: così sotto la frase si disegna una linea
+    continua, senza buchi tra una parola e l'altra.
+    """
+    rettangoli: list[Rett] = []
+    riga_precedente = None
+    for parola in parole:
+        x0, y0, x1, y1 = parola.rett
+        if rettangoli and parola.riga == riga_precedente:
+            # Stessa riga della parola prima: si allarga l'ultimo rettangolo.
+            a0, b0, a1, b1 = rettangoli[-1]
+            rettangoli[-1] = (min(a0, x0), min(b0, y0), max(a1, x1), max(b1, y1))
+        else:
+            # Riga nuova: si comincia un rettangolo nuovo.
+            rettangoli.append((x0, y0, x1, y1))
+        riga_precedente = parola.riga
+    return rettangoli
 
 
 class Documento:
@@ -98,7 +134,7 @@ class Documento:
         pagina_pdf = self._pagina(pagina)
         risultato = []
         # get_text("words") restituisce tuple: (x0, y0, x1, y1, testo, blocco, riga, n_parola)
-        for x0, y0, x1, y1, testo, *_ in pagina_pdf.get_text("words"):
+        for x0, y0, x1, y1, testo, blocco, riga, _ in pagina_pdf.get_text("words"):
             testo_pulito = pulisci(testo)
             if not testo_pulito:  # una "parola" fatta solo di punteggiatura si scarta
                 continue
@@ -109,7 +145,7 @@ class Documento:
             # une alle altre; normalize() rimette in ordine gli angoli del rettangolo.
             rettangolo = pymupdf.Rect(x0, y0, x1, y1) * pagina_pdf.rotation_matrix
             rettangolo.normalize()
-            risultato.append(Parola(testo_pulito, tuple(rettangolo)))
+            risultato.append(Parola(testo_pulito, tuple(rettangolo), (blocco, riga)))
         return risultato
 
     def parola_in(self, pagina: int, x: float, y: float) -> Parola | None:
