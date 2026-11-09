@@ -35,7 +35,14 @@ AZIONI_FISSE: list[tuple[str, str]] = [
     ("rimpicciolisci", "Rimpicciolisci"),
     ("apri_libro", "Apri libro"),
     ("chiudi_programma", "Chiudi programma"),
+    # Questa vale solo DENTRO il pop-up della nota (vedi interfaccia/popup.py),
+    # non nella finestra principale.
+    ("salva_nota", "Salva nota (nel pop-up)"),
 ]
+
+# Il tasto per salvare la nota nel pop-up: Invio, sia quello grande ("Return")
+# sia quello del tastierino numerico ("Enter"). Con Shift+Invio si va a capo.
+TASTI_SALVA_NOTA = ["Return", "Enter"]
 
 # I tasti predefiniti delle azioni fisse.
 _TASTI_FISSI: dict[str, list[str]] = {
@@ -45,6 +52,7 @@ _TASTI_FISSI: dict[str, list[str]] = {
     "rimpicciolisci": ["-", "Ctrl+-"],
     "apri_libro": ["Ctrl+O", ""],
     "chiudi_programma": ["Ctrl+W", ""],
+    "salva_nota": TASTI_SALVA_NOTA,
 }
 
 # Per ogni colore della tavolozza c'è l'azione "pallino_<nome>".

@@ -13,6 +13,7 @@ from PySide6.QtGui import QAction, QColor, QIcon, QPixmap
 from PySide6.QtWidgets import QMenu
 
 from studiopdf.documento import Parola, rettangoli_per_riga, testo_frase
+from studiopdf.impostazioni import TASTI_SALVA_NOTA
 from studiopdf.interfaccia import disegno
 from studiopdf.interfaccia.anteprima import AnteprimaNota
 from studiopdf.interfaccia.popup import RisultatoPopup, chiedi_conferma, chiedi_nota
@@ -258,7 +259,9 @@ class GestoreNote:
 
     def chiedi(self, titolo: str, testo: str = "", eliminabile: bool = False) -> RisultatoPopup:
         """Apre il pop-up. È un metodo a parte così i test possono sostituirlo."""
-        return chiedi_nota(self.finestra, titolo, testo, eliminabile)
+        # Il tasto per salvare scelto in ⚙ Config → Keybinding (predefinito: Invio).
+        tasti_salva = self.finestra.impostazioni.tasti.get("salva_nota", TASTI_SALVA_NOTA)
+        return chiedi_nota(self.finestra, titolo, testo, eliminabile, tasti_salva=tasti_salva)
 
     def mostra_menu(self, menu: QMenu, posizione: QPoint) -> QAction | None:
         """Mostra il menu e aspetta la scelta (None = nessuna).
