@@ -28,12 +28,14 @@ class Segnalibro:
 
 @dataclass
 class Sottolineatura:
-    """Una parola sottolineata con la propria spiegazione."""
+    """Una frase sottolineata (una o più parole di fila) con la propria spiegazione."""
 
     id: str  # 8 caratteri esadecimali, es. "a3f9c210"
     pagina: int
-    parola: str
-    rett: Rett
+    testo: str  # le parole della frase, separate da uno spazio
+    # Un rettangolo per ogni RIGA della frase, nell'ordine di lettura: ognuno
+    # copre tutte le parole sottolineate di quella riga. Mai vuoto.
+    rettangoli: list[Rett]
     spiegazione: str
 
 

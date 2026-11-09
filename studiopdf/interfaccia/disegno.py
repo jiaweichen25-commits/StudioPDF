@@ -39,29 +39,36 @@ LIVELLO_NOTE = 2
 
 
 def crea_sottolineatura(sottolineatura: Sottolineatura) -> list[QGraphicsItem]:
-    """Una sottolineatura è fatta di due elementi:
+    """Gli elementi grafici di una frase sottolineata.
 
-    1. la LINEA visibile sotto la parola;
-    2. un RETTANGOLO invisibile sopra la parola, che serve solo a
-       "prendere" il clic (cliccare su una linea sottile sarebbe difficile).
+    Per OGNI riga della frase (cioè per ogni rettangolo) si creano due elementi:
+
+    1. la LINEA visibile sotto la riga;
+    2. un RETTANGOLO invisibile sopra la riga, che serve solo a "prendere"
+       il clic (cliccare su una linea sottile sarebbe difficile).
+
+    Tutti i rettangoli portano lo stesso id: passare il mouse o cliccare su
+    una qualunque riga della frase vuol dire la stessa nota.
     """
-    x0, y0, x1, y1 = sottolineatura.rett
-    y_linea = y1 + DISTANZA_SOTTOLINEATURA
+    elementi: list[QGraphicsItem] = []
+    for x0, y0, x1, y1 in sottolineatura.rettangoli:
+        y_linea = y1 + DISTANZA_SOTTOLINEATURA
 
-    linea = QGraphicsLineItem(QLineF(x0, y_linea, x1, y_linea))
-    penna = QPen(COLORE_SOTTOLINEATURA, SPESSORE_SOTTOLINEATURA)
-    penna.setCosmetic(True)  # "cosmetica" = spessore fisso sullo schermo, qualunque zoom
-    linea.setPen(penna)
+        linea = QGraphicsLineItem(QLineF(x0, y_linea, x1, y_linea))
+        penna = QPen(COLORE_SOTTOLINEATURA, SPESSORE_SOTTOLINEATURA)
+        penna.setCosmetic(True)  # "cosmetica" = spessore fisso sullo schermo, qualunque zoom
+        linea.setPen(penna)
 
-    area_clic = QGraphicsRectItem(QRectF(x0, y0, x1 - x0, y_linea - y0))
-    area_clic.setPen(QPen(Qt.PenStyle.NoPen))  # nessun bordo
-    area_clic.setBrush(QBrush(Qt.BrushStyle.NoBrush))  # nessun riempimento: invisibile
-    area_clic.setData(CHIAVE_ID, sottolineatura.id)
-    area_clic.setCursor(Qt.CursorShape.PointingHandCursor)  # la "manina" dice: cliccabile
+        area_clic = QGraphicsRectItem(QRectF(x0, y0, x1 - x0, y_linea - y0))
+        area_clic.setPen(QPen(Qt.PenStyle.NoPen))  # nessun bordo
+        area_clic.setBrush(QBrush(Qt.BrushStyle.NoBrush))  # nessun riempimento: invisibile
+        area_clic.setData(CHIAVE_ID, sottolineatura.id)
+        area_clic.setCursor(Qt.CursorShape.PointingHandCursor)  # la "manina" dice: cliccabile
 
-    for elemento in (linea, area_clic):
-        elemento.setZValue(LIVELLO_NOTE)
-    return [linea, area_clic]
+        for elemento in (linea, area_clic):
+            elemento.setZValue(LIVELLO_NOTE)
+        elementi += [linea, area_clic]
+    return elementi
 
 
 def posizioni_pallini(pallini: list[Pallino], documento: Documento) -> dict[str, tuple[float, float]]:

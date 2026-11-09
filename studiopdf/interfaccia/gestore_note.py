@@ -9,10 +9,10 @@ import html
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QPoint
-from PySide6.QtGui import QColor, QIcon, QPixmap
+from PySide6.QtGui import QAction, QColor, QIcon, QPixmap
 from PySide6.QtWidgets import QMenu
 
-from studiopdf.documento import Parola
+from studiopdf.documento import Parola, rettangoli_per_riga, testo_frase
 from studiopdf.interfaccia import disegno
 from studiopdf.interfaccia.anteprima import AnteprimaNota
 from studiopdf.interfaccia.popup import RisultatoPopup, chiedi_conferma, chiedi_nota
@@ -23,6 +23,21 @@ from studiopdf.tavolozza import Colore, trova_colore
 # durante l'esecuzione: così evitiamo un import circolare con finestra.py.
 if TYPE_CHECKING:
     from studiopdf.interfaccia.finestra import FinestraPrincipale
+
+# Oltre questa lunghezza, nei titoli la frase sottolineata viene accorciata con «…».
+LUNGHEZZA_MASSIMA_TITOLO = 60
+
+
+def titolo_frase(testo: str) -> str:
+    """Il titolo di una sottolineatura: la frase tra «», accorciata se è lunga.
+
+    Esempi:  "serie monotona"           -> "«serie monotona»"
+             (frase di 100 caratteri)   -> "«i primi 60 caratteri…»"
+    """
+    if len(testo) > LUNGHEZZA_MASSIMA_TITOLO:
+        # rstrip() toglie l'eventuale spazio finale, così non resta "parola …".
+        testo = testo[:LUNGHEZZA_MASSIMA_TITOLO].rstrip() + "…"
+    return f"«{testo}»"
 
 
 class GestoreNote:
@@ -52,7 +67,7 @@ class GestoreNote:
 
         # html.escape evita che caratteri come < o & nel testo rompano il titolo (che è HTML).
         if isinstance(nota, Sottolineatura):
-            titolo, testo = f"«{html.escape(nota.parola)}»", nota.spiegazione
+            titolo, testo = html.escape(titolo_frase(nota.testo)), nota.spiegazione
         else:
             titolo, testo = self._titolo_pallino_html(nota.colore), nota.testo
         self.anteprima.mostra(titolo, testo, posizione)
@@ -87,7 +102,7 @@ class GestoreNote:
             return
 
         if isinstance(nota, Sottolineatura):
-            domanda = f"Eliminare la sottolineatura di «{nota.parola}»?"
+            domanda = f"Eliminare la sottolineatura di {titolo_frase(nota.testo)}?"
         else:
             domanda = f"Eliminare il pallino «{self._titolo_pallino(nota.colore)}»?"
         if self.conferma(domanda + "\nL'operazione non si può annullare."):
@@ -103,15 +118,25 @@ class GestoreNote:
     # =========================================================================
 
     def quando_menu_parola(self, parola: Parola, posizione: QPoint) -> None:
+        # Per sottolineare non si passa più da qui: si seleziona la frase
+        # trascinando il mouse (vedi quando_selezione).
         menu = QMenu(self.finestra)
-        azione_sottolinea = menu.addAction("Sottolinea e spiega…")
         azione_segnalibro = menu.addAction("Segnalibro qui")
 
-        scelta = menu.exec(posizione)  # mostra il menu e aspetta la scelta (None = nessuna)
-        if scelta is azione_sottolinea:
-            self.sottolinea(parola)
-        elif scelta is azione_segnalibro:
+        if self.mostra_menu(menu, posizione) is azione_segnalibro:
             self.metti_segnalibro(parola)
+
+    # =========================================================================
+    # Menu dopo aver selezionato una frase trascinando il mouse
+    # =========================================================================
+
+    def quando_selezione(self, parole: list[Parola], posizione: QPoint) -> None:
+        """L'utente ha selezionato delle parole: gli chiediamo se vuole sottolinearle."""
+        menu = QMenu(self.finestra)
+        azione_sottolinea = menu.addAction("Sottolinea e spiega…")
+
+        if self.mostra_menu(menu, posizione) is azione_sottolinea:
+            self.sottolinea(parole)
 
     # =========================================================================
     # Segnalibro
@@ -129,23 +154,31 @@ class GestoreNote:
     # Sottolineature
     # =========================================================================
 
-    def sottolinea(self, parola: Parola) -> None:
-        """Chiede la spiegazione e sottolinea la parola."""
-        if not self._modificabile():
+    def sottolinea(self, parole: list[Parola]) -> None:
+        """Chiede la spiegazione e sottolinea la frase formata da queste parole.
+
+        Le parole devono essere in ordine di lettura (come le dà la selezione).
+        Se anche una sola è già sottolineata, avvisa e non fa niente:
+        due sottolineature non devono mai stare una sopra l'altra.
+        """
+        if not parole or not self._modificabile():
             return
         archivio = self.finestra.archivio
         pagina = self.finestra.pagina
 
-        # Se la parola è già sottolineata, il pop-up parte con la spiegazione esistente.
-        esistente = next(
-            (s for s in archivio.della_pagina(pagina)[0] if s.rett == parola.rett),
-            None,
-        )
-        testo_iniziale = esistente.spiegazione if esistente else ""
+        if archivio.sottolineatura_sovrapposta(pagina, [parola.rett for parola in parole]) is not None:
+            self.finestra.avvisa(
+                "Già sottolineata",
+                "Una parte di questa frase è già sottolineata.\n"
+                "Per cambiarne la spiegazione fai doppio clic sulla sottolineatura.",
+            )
+            return
 
-        risposta = self.chiedi(f"«{parola.testo}»", testo_iniziale)
+        testo = testo_frase(parole)
+        risposta = self.chiedi(titolo_frase(testo))
         if risposta is not None and risposta[0] == "salva":
-            archivio.aggiungi_sottolineatura(pagina, parola.testo, parola.rett, risposta[1])
+            # Un rettangolo per ogni riga: la linea sotto la frase sarà continua.
+            archivio.aggiungi_sottolineatura(pagina, testo, rettangoli_per_riga(parole), risposta[1])
             self._salva_e_ridisegna()
 
     # =========================================================================
@@ -205,7 +238,7 @@ class GestoreNote:
             return  # nota sparita nel frattempo: non c'è niente da aprire
 
         if isinstance(nota, Sottolineatura):
-            titolo, testo = f"«{nota.parola}»", nota.spiegazione
+            titolo, testo = titolo_frase(nota.testo), nota.spiegazione
         else:
             titolo, testo = self._titolo_pallino(nota.colore), nota.testo
 
@@ -226,6 +259,14 @@ class GestoreNote:
     def chiedi(self, titolo: str, testo: str = "", eliminabile: bool = False) -> RisultatoPopup:
         """Apre il pop-up. È un metodo a parte così i test possono sostituirlo."""
         return chiedi_nota(self.finestra, titolo, testo, eliminabile)
+
+    def mostra_menu(self, menu: QMenu, posizione: QPoint) -> QAction | None:
+        """Mostra il menu e aspetta la scelta (None = nessuna).
+
+        È un metodo a parte così i test possono sostituirlo: un menu vero
+        aspetterebbe un clic che nei test non arriva mai.
+        """
+        return menu.exec(posizione)
 
     def _titolo_pallino_html(self, nome_colore: str) -> str:
         """Come _titolo_pallino, ma con il pallino colorato (per l'anteprima, che accetta HTML)."""

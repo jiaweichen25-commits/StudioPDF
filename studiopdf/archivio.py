@@ -21,7 +21,10 @@ from studiopdf.note import Nota, Pallino, Rett, Segnalibro, Sottolineatura
 
 # Versione del formato del file. Se un giorno il formato cambia, si alza
 # questo numero: un programma vecchio riconoscerà un file "dal futuro".
-VERSIONE = 1
+#   1 = una sottolineatura è UNA parola:  "parola" + "rett"
+#   2 = una sottolineatura è una FRASE:   "testo" + "rettangoli" (uno per riga)
+# I file della versione 1 si leggono ancora; si salva sempre nella versione 2.
+VERSIONE = 2
 
 ESTENSIONE_NOTE = ".note.json"
 
@@ -70,7 +73,7 @@ class Archivio:
                 archivio.motivo_sola_lettura = "versione_futura"
                 return archivio
 
-            archivio._leggi_dati(dati)
+            archivio._leggi_dati(dati, versione)
         except (ValueError, KeyError, TypeError):
             # ValueError comprende JSON non valido e testo non UTF-8.
             # Il file non si capisce: lo mettiamo da parte e ripartiamo vuoti.
@@ -85,7 +88,7 @@ class Archivio:
 
         return archivio
 
-    def _leggi_dati(self, dati: dict) -> None:
+    def _leggi_dati(self, dati: dict, versione: int) -> None:
         """Converte il dizionario letto dal JSON in oggetti Python.
 
         I costruttori int(), float(), str() sollevano un errore se un valore
@@ -99,16 +102,7 @@ class Archivio:
                 rett=_leggi_rett(segnalibro["rett"]),
             )
 
-        self.sottolineature = [
-            Sottolineatura(
-                id=str(voce["id"]),
-                pagina=int(voce["pagina"]),
-                parola=str(voce["parola"]),
-                rett=_leggi_rett(voce["rett"]),
-                spiegazione=str(voce["spiegazione"]),
-            )
-            for voce in dati["sottolineature"]
-        ]
+        self.sottolineature = [_leggi_sottolineatura(voce, versione) for voce in dati["sottolineature"]]
 
         self.pallini = [
             Pallino(
@@ -187,16 +181,33 @@ class Archivio:
     # Operazioni sulle note
     # =========================================================================
 
-    def aggiungi_sottolineatura(self, pagina: int, parola: str, rett: Rett, spiegazione: str) -> Sottolineatura:
-        """Sottolinea una parola. Se è già sottolineata, ne aggiorna la spiegazione."""
-        for esistente in self.sottolineature:
-            if esistente.pagina == pagina and esistente.rett == rett:
-                esistente.spiegazione = spiegazione
-                return esistente
+    def aggiungi_sottolineatura(
+        self, pagina: int, testo: str, rettangoli: list[Rett], spiegazione: str
+    ) -> Sottolineatura:
+        """Sottolinea una frase (rettangoli = uno per riga). Crea sempre una nota nuova.
 
-        nuova = Sottolineatura(_nuovo_id(), pagina, parola, rett, spiegazione)
+        Non controlla le sovrapposizioni: chi chiama deve prima usare
+        sottolineatura_sovrapposta() e decidere cosa fare.
+        """
+        nuova = Sottolineatura(_nuovo_id(), pagina, testo, list(rettangoli), spiegazione)
         self.sottolineature.append(nuova)
         return nuova
+
+    def sottolineatura_sovrapposta(self, pagina: int, rettangoli_parole: list[Rett]) -> Sottolineatura | None:
+        """La sottolineatura già esistente che contiene una di queste parole, oppure None.
+
+        rettangoli_parole = i rettangoli delle singole parole che si vogliono sottolineare.
+        Una parola "cade" in una sottolineatura se il suo CENTRO sta dentro uno dei
+        rettangoli della sottolineatura. Si usa il centro, e non il bordo, perché i
+        rettangoli di due righe vicine possono toccarsi di qualche decimo di punto.
+        """
+        for esistente in self.sottolineature:
+            if esistente.pagina != pagina:
+                continue
+            for rett_parola in rettangoli_parole:
+                if any(_centro_dentro(rett_parola, rett) for rett in esistente.rettangoli):
+                    return esistente
+        return None
 
     def aggiungi_pallino(self, pagina: int, y: float, lato: str, colore: str, testo: str) -> Pallino:
         nuovo = Pallino(_nuovo_id(), pagina, y, lato, colore, testo)
@@ -250,6 +261,39 @@ class Archivio:
 def _nuovo_id() -> str:
     """Un identificativo casuale di 8 caratteri esadecimali, es. "a3f9c210"."""
     return uuid.uuid4().hex[:8]
+
+
+def _leggi_sottolineatura(voce: dict, versione: int) -> Sottolineatura:
+    """Una sottolineatura letta dal JSON, in uno dei due formati.
+
+    Versione 1 (vecchia): una parola sola  -> {"parola": ..., "rett": [...]}
+    Versione 2 (attuale): una frase        -> {"testo": ..., "rettangoli": [[...], ...]}
+    Una parola della versione 1 diventa una frase di una parola, su una riga.
+    """
+    if versione == 1:
+        testo = str(voce["parola"])
+        rettangoli = [_leggi_rett(voce["rett"])]
+    else:
+        testo = str(voce["testo"])
+        rettangoli = [_leggi_rett(rett) for rett in voce["rettangoli"]]
+        if not rettangoli:
+            raise ValueError("una sottolineatura deve avere almeno un rettangolo")
+
+    return Sottolineatura(
+        id=str(voce["id"]),
+        pagina=int(voce["pagina"]),
+        testo=testo,
+        rettangoli=rettangoli,
+        spiegazione=str(voce["spiegazione"]),
+    )
+
+
+def _centro_dentro(piccolo: Rett, grande: Rett) -> bool:
+    """Il centro del rettangolo "piccolo" sta dentro il rettangolo "grande"?"""
+    x0, y0, x1, y1 = piccolo
+    centro_x, centro_y = (x0 + x1) / 2, (y0 + y1) / 2
+    g0, h0, g1, h1 = grande
+    return g0 <= centro_x <= g1 and h0 <= centro_y <= h1
 
 
 def _leggi_rett(valore) -> Rett:

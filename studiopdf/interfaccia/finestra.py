@@ -88,6 +88,7 @@ class FinestraPrincipale(QMainWindow):
         """Quando la vista emette un segnale, quale funzione deve rispondere."""
         self.vista.zoomRichiesto.connect(self.cambia_zoom)
         self.vista.menuParola.connect(self.gestore_note.quando_menu_parola)
+        self.vista.selezioneFatta.connect(self.gestore_note.quando_selezione)
         self.vista.clicNota.connect(self.gestore_note.apri_nota)
         self.vista.clicMargine.connect(self.gestore_note.quando_clic_margine)
         self.vista.menuNota.connect(self.gestore_note.quando_menu_nota)

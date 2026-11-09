@@ -31,10 +31,11 @@ from PySide6.QtGui import (
     QTransform,
     QWheelEvent,
 )
-from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView
+from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsScene, QGraphicsView
 
 from studiopdf.documento import Documento
 from studiopdf.interfaccia import disegno, frecce
+from studiopdf.interfaccia.selezione import Selezione
 from studiopdf.note import Pallino, Rett, Segnalibro, Sottolineatura
 from studiopdf.tavolozza import Colore, trova_colore
 
@@ -52,6 +53,7 @@ class VistaPagina(QGraphicsView):
 
     zoomRichiesto = Signal(int)  # Ctrl+rotellina: +1 ingrandisci, -1 rimpicciolisci
     menuParola = Signal(object, QPoint)  # clic destro su una parola: (Parola, posizione sullo schermo)
+    selezioneFatta = Signal(object, QPoint)  # frase selezionata trascinando: (lista di Parola, posizione sullo schermo)
     menuNota = Signal(str, QPoint)  # clic destro su una nota: (id, posizione sullo schermo)
     clicNota = Signal(str)  # DOPPIO clic su una nota: id della nota (per modificarla)
     notaSorvolata = Signal(str, QPoint)  # il mouse è appena arrivato su una nota: (id, posizione sullo schermo)
@@ -81,6 +83,14 @@ class VistaPagina(QGraphicsView):
 
         # La nota su cui si trova il mouse in questo momento (None = nessuna).
         self._nota_sorvolata: str | None = None
+
+        # La frase che si sta selezionando trascinando il mouse (vedi selezione.py).
+        self._selezione = Selezione(self.scene())
+        # Dove (in pixel della vista) è stato premuto il tasto sinistro...
+        self._punto_pressione = QPoint()
+        # ...e se da lì il mouse si è spostato abbastanza da essere un vero
+        # trascinamento (e non un semplice clic con la mano che trema).
+        self._trascinato = False
         # Senza "mouse tracking" Qt segnala i movimenti solo a pulsante premuto:
         # a noi servono sempre, per l'anteprima e per le frecce.
         self.setMouseTracking(True)
@@ -111,8 +121,9 @@ class VistaPagina(QGraphicsView):
         self._lascia_nota_sorvolata()  # le note stanno per essere ridisegnate
 
         scena = self.scene()
-        scena.clear()  # toglie tutto, comprese le note...
-        self._elementi_note = []  # ...quindi la lista riparte vuota
+        scena.clear()  # toglie tutto, comprese le note e l'azzurro della selezione...
+        self._elementi_note = []  # ...quindi la lista riparte vuota...
+        self._selezione.dimentica()  # ...e una selezione a metà si perde (era della pagina vecchia)
 
         # Su schermi ad alta densità (es. 150%) un "pixel logico" contiene più
         # pixel reali: chiediamo a PyMuPDF un'immagine più grande, così è nitida.
@@ -195,7 +206,7 @@ class VistaPagina(QGraphicsView):
         """Clic destro nel punto (in coordinate PDF).
 
         Su una nota -> menu della nota (modifica / elimina).
-        Su una parola -> menu della parola (sottolinea / segnalibro).
+        Su una parola -> menu della parola (segnalibro).
         """
         if self._documento is None:
             return
@@ -238,6 +249,56 @@ class VistaPagina(QGraphicsView):
         return True
 
     # =========================================================================
+    # Selezionare una frase trascinando il mouse
+    # =========================================================================
+    #
+    # Le tre fasi:
+    #   1. tasto sinistro premuto su una parola  -> inizia_selezione
+    #   2. mouse spostato con il tasto premuto    -> continua_selezione
+    #   3. tasto lasciato                         -> finisci_selezione
+    #                                                (emette selezioneFatta)
+
+    def inizia_selezione(self, punto: QPointF, posizione_vista: QPoint) -> None:
+        """Tasto sinistro premuto nel punto (coordinate PDF): forse inizia una selezione.
+
+        La selezione parte solo se sotto il mouse c'è una parola.
+        """
+        self._selezione.annulla()  # una selezione rimasta a metà non serve più
+        self._trascinato = False
+        if self._documento is None:
+            return
+        parola = self._documento.parola_in(self._pagina, punto.x(), punto.y())
+        if parola is None:
+            return
+        self._selezione.inizia(self._documento.parole(self._pagina), parola)
+        self._punto_pressione = posizione_vista
+
+    def continua_selezione(self, punto: QPointF, posizione_vista: QPoint) -> None:
+        """Il mouse si è spostato con il tasto premuto: la selezione arriva fin qui."""
+        if not self._selezione.attiva:
+            return
+        if not self._trascinato:
+            # È un vero trascinamento solo se il mouse si è spostato almeno della
+            # distanza "standard" di Qt (pochi pixel). manhattanLength = |dx| + |dy|.
+            spostamento = (posizione_vista - self._punto_pressione).manhattanLength()
+            if spostamento < QApplication.startDragDistance():
+                return
+            self._trascinato = True
+            self._lascia_nota_sorvolata()  # mentre si seleziona, niente anteprime
+        # Se qui non c'è una parola (spazio vuoto) la selezione resta all'ultima toccata.
+        self._selezione.estendi(self._selezione.parola_in(punto))
+
+    def finisci_selezione(self, posizione_schermo: QPoint) -> None:
+        """Tasto lasciato: se si è trascinato, avvisa quali parole sono state selezionate."""
+        if self._selezione.attiva and self._trascinato:
+            # Chi riceve il segnale (gestore_note.py) mostra il menu e il pop-up
+            # PRIMA che emit() ritorni: intanto l'azzurro resta visibile, così
+            # si vede quale frase si sta spiegando.
+            self.selezioneFatta.emit(self._selezione.parole(), posizione_schermo)
+        self._selezione.annulla()
+        self._trascinato = False
+
+    # =========================================================================
     # Movimento del mouse: anteprima delle note e frecce laterali
     # =========================================================================
 
@@ -248,6 +309,8 @@ class VistaPagina(QGraphicsView):
         posizione_vista   = dove si trova nella vista (pixel), per le frecce
         posizione_schermo = dove si trova sullo schermo, per posizionare l'anteprima
         """
+        if self._trascinato:
+            return  # si sta selezionando una frase: le anteprime darebbero solo fastidio
         id_nota = self._id_nota_in(punto)
         if id_nota != self._nota_sorvolata:  # avvisiamo solo quando CAMBIA qualcosa
             self._lascia_nota_sorvolata()
@@ -318,7 +381,11 @@ class VistaPagina(QGraphicsView):
 
     def mouseMoveEvent(self, evento: QMouseEvent) -> None:
         punto_vista = evento.position().toPoint()
-        self.gestisci_movimento(self.mapToScene(punto_vista), punto_vista, evento.globalPosition().toPoint())
+        punto = self.mapToScene(punto_vista)
+        # buttons() = i tasti tenuti premuti in questo momento.
+        if evento.buttons() & Qt.MouseButton.LeftButton:
+            self.continua_selezione(punto, punto_vista)
+        self.gestisci_movimento(punto, punto_vista, evento.globalPosition().toPoint())
         super().mouseMoveEvent(evento)
 
     def mouseDoubleClickEvent(self, evento: QMouseEvent) -> None:
@@ -344,10 +411,19 @@ class VistaPagina(QGraphicsView):
     def mousePressEvent(self, evento: QMouseEvent) -> None:
         if evento.button() == Qt.MouseButton.LeftButton:
             punto_vista = evento.position().toPoint()
-            if self.gestisci_clic_sinistro(self.mapToScene(punto_vista), evento.globalPosition().toPoint()):
+            punto = self.mapToScene(punto_vista)
+            # Prima si guarda se il clic è su una nota o nel margine...
+            if self.gestisci_clic_sinistro(punto, evento.globalPosition().toPoint()):
                 evento.accept()
                 return
+            # ...altrimenti forse sta iniziando la selezione di una frase.
+            self.inizia_selezione(punto, punto_vista)
         super().mousePressEvent(evento)
+
+    def mouseReleaseEvent(self, evento: QMouseEvent) -> None:
+        if evento.button() == Qt.MouseButton.LeftButton:
+            self.finisci_selezione(evento.globalPosition().toPoint())
+        super().mouseReleaseEvent(evento)
 
     def wheelEvent(self, evento: QWheelEvent) -> None:
         """Ctrl+rotellina = zoom; rotellina da sola = scorrimento normale."""

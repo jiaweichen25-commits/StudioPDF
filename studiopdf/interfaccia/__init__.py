@@ -2,6 +2,7 @@
 
 - finestra.py      la finestra principale: menu, pagine, zoom
 - vista_pagina.py  mostra una pagina e capisce su cosa si clicca
+- selezione.py     la frase che si sta selezionando trascinando il mouse
 - disegno.py       disegna sottolineature, pallini e segnalibro
 - gestore_note.py  cosa succede quando si crea/modifica/elimina una nota
 - popup.py         la finestrella per scrivere una nota
