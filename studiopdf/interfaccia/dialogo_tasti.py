@@ -10,9 +10,13 @@ Una tabella con una riga per azione e due caselle per i tasti:
 Si clicca su una casella e si preme il tasto (o la combinazione, es. Ctrl+W).
 La ✕ nella casella la svuota. Se lo stesso tasto finisce su due azioni,
 il nome di quelle azioni diventa rosso e «Salva» si disattiva finché non si sistema.
+
+Esc NON si può registrare: dentro una casella annulla (la casella resta com'era
+e si esce da lì); premuto di nuovo chiude la finestra come «Annulla».
+Invio invece si può registrare (serve per «Salva nota»).
 """
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtGui import QColor, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -85,7 +89,7 @@ class DialogoTasti(QDialog):
         riga_pulsanti.addWidget(self.pulsante_salva)
 
         colonna = QVBoxLayout(self)
-        colonna.addWidget(QLabel("Clicca su una casella e premi il tasto da usare. La ✕ svuota la casella."))
+        colonna.addWidget(QLabel("Clicca su una casella e premi il tasto da usare. La ✕ svuota la casella, Esc annulla."))
         colonna.addWidget(self.tabella)
         colonna.addWidget(self.etichetta_conflitti)
         colonna.addLayout(riga_pulsanti)
@@ -115,6 +119,9 @@ class DialogoTasti(QDialog):
                 casella.setMaximumSequenceLength(1)  # un solo tasto (o combinazione) per casella
                 casella.setClearButtonEnabled(True)  # la ✕ per svuotarla
                 casella.keySequenceChanged.connect(self._aggiorna_conflitti)
+                # Ogni tasto premuto nella casella passa prima da eventFilter() qui sotto,
+                # che ferma Esc prima che la casella lo registri.
+                casella.installEventFilter(self)
                 tabella.setCellWidget(riga, 1 + colonna, casella)
                 self.caselle[azione].append(casella)
         return tabella
@@ -126,6 +133,23 @@ class DialogoTasti(QDialog):
             for casella, tasto in zip(caselle, coppia):
                 casella.setKeySequence(QKeySequence(tasto))
         self._aggiorna_conflitti()
+
+    def eventFilter(self, oggetto: QObject, evento: QEvent) -> bool:
+        """Ferma Esc nelle caselle: non diventa una scorciatoia, ma annulla.
+
+        Restituire True vuol dire "l'ho gestito io": la casella non lo riceve.
+        Si controllano due tipi di evento: KeyPress (il tasto premuto) e
+        ShortcutOverride (Qt chiede alla casella "questo tasto lo vuoi tu?").
+        """
+        tipi = (QEvent.Type.KeyPress, QEvent.Type.ShortcutOverride)
+        if oggetto in self._tutte_le_caselle() and evento.type() in tipi and evento.key() == Qt.Key.Key_Escape:
+            if evento.type() == QEvent.Type.KeyPress:
+                oggetto.clearFocus()  # si esce dalla casella, che resta com'era
+            return True
+        return super().eventFilter(oggetto, evento)
+
+    def _tutte_le_caselle(self) -> list[QKeySequenceEdit]:
+        return [casella for caselle in self.caselle.values() for casella in caselle]
 
     # =========================================================================
     # Lettura dei tasti e conflitti
