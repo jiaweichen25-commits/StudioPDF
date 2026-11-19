@@ -4,6 +4,7 @@ Un lettore PDF minimale per **studiare libri**, scritto in Python (PySide6 + PyM
 
 - **Segnalibro sulla parola**: riapri il libro esattamente dove ti eri fermato.
 - **Sottolinea una frase** (anche su più righe) e scrivi la tua spiegazione: passando il mouse sulla sottolineatura la rileggi.
+- **Evidenzia una frase** con un colore della tavolozza: resta colorata e con un clic apri la nota.
 - **Pallini colorati nel margine** con note e sintesi; ogni colore ha un significato scelto da te.
 
 Il PDF originale **non viene mai modificato**: le note stanno in un file JSON accanto al PDF
@@ -17,6 +18,8 @@ Il PDF originale **non viene mai modificato**: le note stanno in un file JSON ac
 | Sfogliare | `←` `→`, `PagSu` `PagGiù`, i pulsanti in alto, oppure le frecce ‹ › che compaiono avvicinando il mouse ai bordi |
 | Zoom | `+` `-`, i pulsanti in alto, oppure `Ctrl` + rotellina |
 | Sottolineare una frase | trascina il mouse con il tasto sinistro dalla prima all'ultima parola, poi «Sottolinea e spiega…» |
+| Evidenziare una frase | trascina sulla frase, poi scegli il colore nel menu (o premi il suo tasto: `1`, `2`, `3`…) |
+| Leggere / modificare un'evidenziatura | un clic sull'evidenziatura |
 | Segnalibro | clic destro sulla parola → Segnalibro qui |
 | Nuovo pallino | clic sinistro nel margine, poi scegli il colore |
 | Salvare la nota nel pop-up | `Invio` (per andare a capo `Shift+Invio`); il tasto si cambia in ⚙ Config → Keybinding |
@@ -85,6 +88,7 @@ studiopdf/
     finestra.py             finestra principale
     vista_pagina.py         la pagina e i clic
     selezione.py            la frase selezionata trascinando il mouse
+    menu_tasti.py           menu in cui un tasto sceglie una voce
     disegno.py              sottolineature, pallini, segnalibro
     gestore_note.py         creare / modificare / eliminare note
     popup.py                la finestrella per scrivere le note

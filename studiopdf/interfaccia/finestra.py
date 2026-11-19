@@ -380,7 +380,14 @@ class FinestraPrincipale(QMainWindow):
         segnalibro = self.archivio.segnalibro
         if segnalibro is not None and segnalibro.pagina != self.pagina:
             segnalibro = None  # il segnalibro si disegna solo sulla sua pagina
-        self.vista.disegna_note(sottolineature, pallini, segnalibro, self.tavolozza, self.documento)
+        self.vista.disegna_note(
+            sottolineature,
+            pallini,
+            segnalibro,
+            self.tavolozza,
+            self.documento,
+            evidenziature=self.archivio.evidenziature_della_pagina(self.pagina),
+        )
 
     def avvisa(self, titolo: str, testo: str) -> None:
         """Mostra un messaggio di avviso (finestrella con OK)."""

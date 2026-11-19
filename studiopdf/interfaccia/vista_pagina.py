@@ -19,6 +19,8 @@ Cosa NON fa questa vista: non salva e non decide niente. Quando l'utente
 clicca qualcosa, emette un segnale; è gestore_note.py a decidere cosa fare.
 """
 
+from collections.abc import Sequence
+
 from PySide6.QtCore import QPoint, QPointF, Qt, Signal
 from PySide6.QtGui import (
     QColor,
@@ -36,7 +38,7 @@ from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsScene, QGrap
 from studiopdf.documento import Documento
 from studiopdf.interfaccia import disegno, frecce
 from studiopdf.interfaccia.selezione import Selezione
-from studiopdf.note import Pallino, Rett, Segnalibro, Sottolineatura
+from studiopdf.note import Evidenziatura, Pallino, Rett, Segnalibro, Sottolineatura
 from studiopdf.tavolozza import Colore, trova_colore
 
 # Spazio (in pixel) lasciato ai lati della pagina con "adatta alla larghezza".
@@ -170,6 +172,7 @@ class VistaPagina(QGraphicsView):
         segnalibro: Segnalibro | None,
         tavolozza: list[Colore],
         documento: Documento,
+        evidenziature: Sequence[Evidenziatura] = (),
     ) -> None:
         """Toglie le note disegnate prima e disegna quelle indicate."""
         self._lascia_nota_sorvolata()
@@ -178,6 +181,8 @@ class VistaPagina(QGraphicsView):
             scena.removeItem(elemento)
 
         nuovi: list[QGraphicsItem] = []
+        for evidenziatura in evidenziature:
+            nuovi += disegno.crea_evidenziatura(evidenziatura, trova_colore(tavolozza, evidenziatura.colore))
         for sottolineatura in sottolineature:
             nuovi += disegno.crea_sottolineatura(sottolineatura)
 
@@ -225,9 +230,13 @@ class VistaPagina(QGraphicsView):
 
         Restituisce True se il clic è stato "usato" (su una nota o nel margine).
         """
-        # 1) Su una nota esistente? Il clic singolo non fa niente: per leggere
-        #    c'è l'anteprima, per modificare il doppio clic.
-        if self._id_nota_in(punto) is not None:
+        # 1) Su una nota esistente?
+        #    - un'evidenziatura si apre subito, con il clic singolo;
+        #    - le altre note no: per leggere c'è l'anteprima, per modificare il doppio clic.
+        id_nota = self._id_nota_in(punto)
+        if id_nota is not None:
+            if self._clic_singolo_in(punto):
+                self.clicNota.emit(id_nota)
             return True
 
         # 2) Nel margine della pagina? Allora si vuole un pallino nuovo.
@@ -312,6 +321,8 @@ class VistaPagina(QGraphicsView):
         if self._trascinato:
             return  # si sta selezionando una frase: le anteprime darebbero solo fastidio
         id_nota = self._id_nota_in(punto)
+        if id_nota is not None and self._clic_singolo_in(punto):
+            id_nota = None  # le evidenziature non hanno anteprima: si aprono con un clic
         if id_nota != self._nota_sorvolata:  # avvisiamo solo quando CAMBIA qualcosa
             self._lascia_nota_sorvolata()
             if id_nota is not None:
@@ -374,6 +385,13 @@ class VistaPagina(QGraphicsView):
             if id_nota:
                 return id_nota
         return None
+
+    def _clic_singolo_in(self, punto: QPointF) -> bool:
+        """La nota nel punto si apre con un clic singolo (cioè è un'evidenziatura)?"""
+        for elemento in self.scene().items(punto):  # stesso ordine di _id_nota_in
+            if elemento.data(disegno.CHIAVE_ID):
+                return bool(elemento.data(disegno.CHIAVE_CLIC_SINGOLO))
+        return False
 
     # =========================================================================
     # Eventi di Qt (mouse): convertono la posizione e chiamano la logica sopra

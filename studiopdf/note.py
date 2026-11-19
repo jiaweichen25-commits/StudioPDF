@@ -51,6 +51,25 @@ class Pallino:
     testo: str
 
 
-# Una nota è o una sottolineatura o un pallino.
+@dataclass
+class Evidenziatura:
+    """Una frase evidenziata con un colore della tavolozza, con una nota dentro.
+
+    È come una Sottolineatura, ma si vede come un colore trasparente sopra
+    il testo e si apre con un clic singolo (senza anteprima).
+    """
+
+    id: str
+    pagina: int
+    testo: str  # le parole della frase, separate da uno spazio
+    rettangoli: list[Rett]  # uno per ogni riga della frase (come nelle sottolineature)
+    colore: str  # il NOME del colore nella tavolozza, es. "rosso"
+    nota: str
+
+
+# Una nota è una sottolineatura, un pallino oppure un'evidenziatura.
 # Il simbolo | si legge "oppure".
-Nota = Sottolineatura | Pallino
+Nota = Sottolineatura | Pallino | Evidenziatura
+
+# Le note che coprono una frase del testo (e che quindi non devono sovrapporsi).
+NotaSuFrase = Sottolineatura | Evidenziatura

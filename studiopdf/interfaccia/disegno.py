@@ -12,12 +12,19 @@ from PySide6.QtGui import QBrush, QColor, QPen
 from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, QGraphicsLineItem, QGraphicsRectItem
 
 from studiopdf.documento import Documento
-from studiopdf.note import Pallino, Segnalibro, Sottolineatura
+from studiopdf.note import Evidenziatura, Pallino, Segnalibro, Sottolineatura
 from studiopdf.tavolozza import Colore
 
 # Ogni elemento cliccabile si porta dietro l'id della sua nota,
 # salvato con setData(CHIAVE_ID, id). Gli altri elementi non hanno id.
 CHIAVE_ID = 0
+
+# Le note che si aprono con un CLIC SINGOLO (e senza anteprima) hanno anche
+# setData(CHIAVE_CLIC_SINGOLO, True). Oggi sono le evidenziature.
+CHIAVE_CLIC_SINGOLO = 1
+
+# --- Aspetto delle evidenziature ---
+TRASPARENZA_EVIDENZIATURA = 85  # da 0 (invisibile) a 255 (pieno): il testo sotto si deve leggere
 
 # --- Aspetto delle sottolineature ---
 COLORE_SOTTOLINEATURA = QColor("#3E63DD")
@@ -68,6 +75,29 @@ def crea_sottolineatura(sottolineatura: Sottolineatura) -> list[QGraphicsItem]:
         for elemento in (linea, area_clic):
             elemento.setZValue(LIVELLO_NOTE)
         elementi += [linea, area_clic]
+    return elementi
+
+
+def crea_evidenziatura(evidenziatura: Evidenziatura, colore: Colore | None) -> list[QGraphicsRectItem]:
+    """Un rettangolo colorato e trasparente sopra ogni riga della frase.
+
+    colore = il colore della tavolozza; None se non c'è più (allora è grigio).
+    Il rettangolo stesso "prende" il clic: un clic singolo apre la nota.
+    """
+    codice_colore = colore.colore if colore is not None else COLORE_SCONOSCIUTO
+    riempimento = QColor(codice_colore)
+    riempimento.setAlpha(TRASPARENZA_EVIDENZIATURA)
+
+    elementi = []
+    for x0, y0, x1, y1 in evidenziatura.rettangoli:
+        rettangolo = QGraphicsRectItem(QRectF(x0, y0, x1 - x0, y1 - y0))
+        rettangolo.setPen(QPen(Qt.PenStyle.NoPen))  # nessun bordo
+        rettangolo.setBrush(QBrush(riempimento))
+        rettangolo.setData(CHIAVE_ID, evidenziatura.id)
+        rettangolo.setData(CHIAVE_CLIC_SINGOLO, True)
+        rettangolo.setCursor(Qt.CursorShape.PointingHandCursor)
+        rettangolo.setZValue(LIVELLO_NOTE - 1)  # sotto sottolineature e pallini
+        elementi.append(rettangolo)
     return elementi
 
 

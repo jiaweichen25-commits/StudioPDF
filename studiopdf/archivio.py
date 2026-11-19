@@ -17,14 +17,15 @@ from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 
-from studiopdf.note import Nota, Pallino, Rett, Segnalibro, Sottolineatura
+from studiopdf.note import Evidenziatura, Nota, NotaSuFrase, Pallino, Rett, Segnalibro, Sottolineatura
 
 # Versione del formato del file. Se un giorno il formato cambia, si alza
 # questo numero: un programma vecchio riconoscerà un file "dal futuro".
 #   1 = una sottolineatura è UNA parola:  "parola" + "rett"
 #   2 = una sottolineatura è una FRASE:   "testo" + "rettangoli" (uno per riga)
-# I file della versione 1 si leggono ancora; si salva sempre nella versione 2.
-VERSIONE = 2
+#   3 = in più ci sono le "evidenziature" (frasi colorate con una nota)
+# I file delle versioni 1 e 2 si leggono ancora; si salva sempre nella versione 3.
+VERSIONE = 3
 
 ESTENSIONE_NOTE = ".note.json"
 
@@ -38,6 +39,7 @@ class Archivio:
         self.segnalibro: Segnalibro | None = None
         self.sottolineature: list[Sottolineatura] = []
         self.pallini: list[Pallino] = []
+        self.evidenziature: list[Evidenziatura] = []
 
         # Se True non si salva mai, per non rovinare dati sul disco. Succede se:
         #   "versione_futura"  -> il file è di una versione più nuova del programma;
@@ -116,11 +118,16 @@ class Archivio:
             for voce in dati["pallini"]
         ]
 
+        # Le evidenziature esistono dalla versione 3: nei file più vecchi non ci sono.
+        if versione >= 3:
+            self.evidenziature = [_leggi_evidenziatura(voce) for voce in dati["evidenziature"]]
+
     def _ripristina_vuoto(self) -> None:
         """Svuota tutto (serve se la lettura si è interrotta a metà)."""
         self.segnalibro = None
         self.sottolineature = []
         self.pallini = []
+        self.evidenziature = []
 
     def _metti_da_parte_file_rotto(self) -> Path:
         """Rinomina il file illeggibile in "<nome>.rotto-AAAA-MM-GG" (o -2, -3... se esiste già).
@@ -161,6 +168,7 @@ class Archivio:
             "segnalibro": asdict(self.segnalibro) if self.segnalibro else None,
             "sottolineature": [asdict(s) for s in self.sottolineature],
             "pallini": [asdict(p) for p in self.pallini],
+            "evidenziature": [asdict(e) for e in self.evidenziature],
         }
         # ensure_ascii=False scrive le lettere accentate così come sono ("perché"),
         # invece del codice di escape ("perch\u00e9").
@@ -175,7 +183,7 @@ class Archivio:
             raise
 
     def _e_vuoto(self) -> bool:
-        return self.segnalibro is None and not self.sottolineature and not self.pallini
+        return self.segnalibro is None and not self.sottolineature and not self.pallini and not self.evidenziature
 
     # =========================================================================
     # Operazioni sulle note
@@ -193,15 +201,27 @@ class Archivio:
         self.sottolineature.append(nuova)
         return nuova
 
-    def sottolineatura_sovrapposta(self, pagina: int, rettangoli_parole: list[Rett]) -> Sottolineatura | None:
-        """La sottolineatura già esistente che contiene una di queste parole, oppure None.
+    def aggiungi_evidenziatura(
+        self, pagina: int, testo: str, rettangoli: list[Rett], colore: str, nota: str
+    ) -> Evidenziatura:
+        """Evidenzia una frase con un colore (il NOME nella tavolozza). Crea sempre una nota nuova.
 
-        rettangoli_parole = i rettangoli delle singole parole che si vogliono sottolineare.
-        Una parola "cade" in una sottolineatura se il suo CENTRO sta dentro uno dei
-        rettangoli della sottolineatura. Si usa il centro, e non il bordo, perché i
-        rettangoli di due righe vicine possono toccarsi di qualche decimo di punto.
+        Come per le sottolineature, le sovrapposizioni le controlla chi chiama
+        (con frase_sovrapposta).
         """
-        for esistente in self.sottolineature:
+        nuova = Evidenziatura(_nuovo_id(), pagina, testo, list(rettangoli), colore, nota)
+        self.evidenziature.append(nuova)
+        return nuova
+
+    def frase_sovrapposta(self, pagina: int, rettangoli_parole: list[Rett]) -> NotaSuFrase | None:
+        """La sottolineatura o evidenziatura già esistente che contiene una di queste parole, oppure None.
+
+        rettangoli_parole = i rettangoli delle singole parole che si vogliono sottolineare
+        o evidenziare. Una parola "cade" in una nota se il suo CENTRO sta dentro uno dei
+        rettangoli della nota. Si usa il centro, e non il bordo, perché i rettangoli
+        di due righe vicine possono toccarsi di qualche decimo di punto.
+        """
+        for esistente in [*self.sottolineature, *self.evidenziature]:
             if esistente.pagina != pagina:
                 continue
             for rett_parola in rettangoli_parole:
@@ -220,16 +240,18 @@ class Archivio:
 
     def trova(self, id: str) -> Nota:
         """La sottolineatura o il pallino con questo id. KeyError se non esiste."""
-        for nota in [*self.sottolineature, *self.pallini]:
+        for nota in [*self.sottolineature, *self.pallini, *self.evidenziature]:
             if nota.id == id:
                 return nota
         raise KeyError(id)
 
     def modifica(self, id: str, testo: str) -> None:
-        """Cambia il testo di una nota (la spiegazione o il testo del pallino)."""
+        """Cambia il testo di una nota (la spiegazione, il testo del pallino o la nota dell'evidenziatura)."""
         nota = self.trova(id)
         if isinstance(nota, Sottolineatura):
             nota.spiegazione = testo
+        elif isinstance(nota, Evidenziatura):
+            nota.nota = testo
         else:
             nota.testo = testo
 
@@ -237,6 +259,8 @@ class Archivio:
         nota = self.trova(id)  # solleva KeyError se non c'è
         if isinstance(nota, Sottolineatura):
             self.sottolineature.remove(nota)
+        elif isinstance(nota, Evidenziatura):
+            self.evidenziature.remove(nota)
         else:
             self.pallini.remove(nota)
 
@@ -245,6 +269,10 @@ class Archivio:
         sottolineature = [s for s in self.sottolineature if s.pagina == pagina]
         pallini = [p for p in self.pallini if p.pagina == pagina]
         return sottolineature, pallini
+
+    def evidenziature_della_pagina(self, pagina: int) -> list[Evidenziatura]:
+        """Le evidenziature di una sola pagina."""
+        return [e for e in self.evidenziature if e.pagina == pagina]
 
     def pagina_di_partenza(self, numero_pagine: int) -> int:
         """Da che pagina aprire il libro: quella del segnalibro, se esiste ancora, altrimenti la 1."""
@@ -285,6 +313,21 @@ def _leggi_sottolineatura(voce: dict, versione: int) -> Sottolineatura:
         testo=testo,
         rettangoli=rettangoli,
         spiegazione=str(voce["spiegazione"]),
+    )
+
+
+def _leggi_evidenziatura(voce: dict) -> Evidenziatura:
+    """Un'evidenziatura letta dal JSON (esistono solo dalla versione 3)."""
+    rettangoli = [_leggi_rett(rett) for rett in voce["rettangoli"]]
+    if not rettangoli:
+        raise ValueError("un'evidenziatura deve avere almeno un rettangolo")
+    return Evidenziatura(
+        id=str(voce["id"]),
+        pagina=int(voce["pagina"]),
+        testo=str(voce["testo"]),
+        rettangoli=rettangoli,
+        colore=str(voce["colore"]),
+        nota=str(voce["nota"]),
     )
 
 

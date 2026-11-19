@@ -13,11 +13,12 @@ from PySide6.QtGui import QAction, QColor, QIcon, QPixmap
 from PySide6.QtWidgets import QMenu
 
 from studiopdf.documento import Parola, rettangoli_per_riga, testo_frase
-from studiopdf.impostazioni import TASTI_SALVA_NOTA
+from studiopdf.impostazioni import PREFISSO_PALLINO, TASTI_SALVA_NOTA
 from studiopdf.interfaccia import disegno
 from studiopdf.interfaccia.anteprima import AnteprimaNota
+from studiopdf.interfaccia.menu_tasti import MenuConTasti
 from studiopdf.interfaccia.popup import RisultatoPopup, chiedi_conferma, chiedi_nota
-from studiopdf.note import Sottolineatura
+from studiopdf.note import Evidenziatura, Sottolineatura
 from studiopdf.tavolozza import Colore, trova_colore
 
 # TYPE_CHECKING è vero solo per gli strumenti che controllano i tipi, mai
@@ -66,6 +67,9 @@ class GestoreNote:
         except KeyError:
             return
 
+        if isinstance(nota, Evidenziatura):
+            return  # le evidenziature non hanno anteprima: si aprono con un clic
+
         # html.escape evita che caratteri come < o & nel testo rompano il titolo (che è HTML).
         if isinstance(nota, Sottolineatura):
             titolo, testo = html.escape(titolo_frase(nota.testo)), nota.spiegazione
@@ -104,6 +108,8 @@ class GestoreNote:
 
         if isinstance(nota, Sottolineatura):
             domanda = f"Eliminare la sottolineatura di {titolo_frase(nota.testo)}?"
+        elif isinstance(nota, Evidenziatura):
+            domanda = f"Eliminare l'evidenziatura di {titolo_frase(nota.testo)}?"
         else:
             domanda = f"Eliminare il pallino «{self._titolo_pallino(nota.colore)}»?"
         if self.conferma(domanda + "\nL'operazione non si può annullare."):
@@ -132,12 +138,33 @@ class GestoreNote:
     # =========================================================================
 
     def quando_selezione(self, parole: list[Parola], posizione: QPoint) -> None:
-        """L'utente ha selezionato delle parole: gli chiediamo se vuole sottolinearle."""
-        menu = QMenu(self.finestra)
-        azione_sottolinea = menu.addAction("Sottolinea e spiega…")
+        """L'utente ha selezionato delle parole: gli chiediamo cosa farne.
 
-        if self.mostra_menu(menu, posizione) is azione_sottolinea:
+        Il menu ha «Sottolinea e spiega…» e poi una voce per ogni colore della
+        tavolozza («Evidenzia rosso — da ripassare»). Con il menu aperto, il tasto
+        di un colore (lo stesso dei pallini in Keybinding) sceglie quel colore.
+        """
+        menu = MenuConTasti(self.finestra)
+        azione_sottolinea = menu.addAction("Sottolinea e spiega…")
+        menu.addSeparator()
+
+        azioni_colore = {}  # voce del menu -> colore della tavolozza
+        for colore in self.finestra.tavolozza:
+            tasti = self.finestra.impostazioni.tasti.get(PREFISSO_PALLINO + colore.nome, [])
+            testo = f"Evidenzia {colore.nome} — {colore.significato}"
+            primo_tasto = next((tasto for tasto in tasti if tasto.strip()), "")
+            if primo_tasto:
+                # Quello che sta dopo "\t" Qt lo mostra allineato a destra, come una scorciatoia.
+                testo += f"\t{primo_tasto}"
+            azione = menu.addAction(_icona_colore(colore.colore), testo)
+            menu.collega_tasti(azione, tasti)
+            azioni_colore[azione] = colore
+
+        scelta = self.mostra_menu(menu, posizione)
+        if scelta is azione_sottolinea:
             self.sottolinea(parole)
+        elif scelta in azioni_colore:
+            self.evidenzia(parole, azioni_colore[scelta])
 
     # =========================================================================
     # Segnalibro
@@ -159,20 +186,15 @@ class GestoreNote:
         """Chiede la spiegazione e sottolinea la frase formata da queste parole.
 
         Le parole devono essere in ordine di lettura (come le dà la selezione).
-        Se anche una sola è già sottolineata, avvisa e non fa niente:
-        due sottolineature non devono mai stare una sopra l'altra.
+        Se anche una sola è già sottolineata o evidenziata, avvisa e non fa niente:
+        due note non devono mai stare una sopra l'altra.
         """
         if not parole or not self._modificabile():
             return
         archivio = self.finestra.archivio
         pagina = self.finestra.pagina
 
-        if archivio.sottolineatura_sovrapposta(pagina, [parola.rett for parola in parole]) is not None:
-            self.finestra.avvisa(
-                "Già sottolineata",
-                "Una parte di questa frase è già sottolineata.\n"
-                "Per cambiarne la spiegazione fai doppio clic sulla sottolineatura.",
-            )
+        if not self._frase_libera(parole):
             return
 
         testo = testo_frase(parole)
@@ -180,6 +202,25 @@ class GestoreNote:
         if risposta is not None and risposta[0] == "salva":
             # Un rettangolo per ogni riga: la linea sotto la frase sarà continua.
             archivio.aggiungi_sottolineatura(pagina, testo, rettangoli_per_riga(parole), risposta[1])
+            self._salva_e_ridisegna()
+
+    # =========================================================================
+    # Evidenziature
+    # =========================================================================
+
+    def evidenzia(self, parole: list[Parola], colore: Colore) -> None:
+        """Chiede la nota ed evidenzia la frase con il colore indicato.
+
+        Come per le sottolineature: niente sovrapposizioni con altre note.
+        """
+        if not parole or not self._modificabile() or not self._frase_libera(parole):
+            return
+        testo = testo_frase(parole)
+        risposta = self.chiedi(self._titolo_evidenziatura(colore.nome, testo))
+        if risposta is not None and risposta[0] == "salva":
+            self.finestra.archivio.aggiungi_evidenziatura(
+                self.finestra.pagina, testo, rettangoli_per_riga(parole), colore.nome, risposta[1]
+            )
             self._salva_e_ridisegna()
 
     # =========================================================================
@@ -240,6 +281,8 @@ class GestoreNote:
 
         if isinstance(nota, Sottolineatura):
             titolo, testo = titolo_frase(nota.testo), nota.spiegazione
+        elif isinstance(nota, Evidenziatura):
+            titolo, testo = self._titolo_evidenziatura(nota.colore, nota.testo), nota.nota
         else:
             titolo, testo = self._titolo_pallino(nota.colore), nota.testo
 
@@ -277,6 +320,27 @@ class GestoreNote:
         codice = colore.colore if colore else disegno.COLORE_SCONOSCIUTO
         significato = colore.significato if colore else nome_colore
         return f'<span style="color:{codice}">●</span> {html.escape(significato)}'
+
+    def _titolo_evidenziatura(self, nome_colore: str, testo: str) -> str:
+        """Titolo del pop-up di un'evidenziatura, es. "■ dubbio · «serie monotona»"."""
+        colore = trova_colore(self.finestra.tavolozza, nome_colore)
+        significato = colore.significato if colore else nome_colore
+        return f"■ {significato} · {titolo_frase(testo)}"
+
+    def _frase_libera(self, parole: list[Parola]) -> bool:
+        """True se nessuna di queste parole è già sottolineata o evidenziata.
+
+        Se invece lo è, avvisa l'utente e restituisce False.
+        """
+        rettangoli = [parola.rett for parola in parole]
+        if self.finestra.archivio.frase_sovrapposta(self.finestra.pagina, rettangoli) is None:
+            return True
+        self.finestra.avvisa(
+            "Già sottolineata o evidenziata",
+            "Una parte di questa frase è già sottolineata o evidenziata.\n"
+            "Per cambiarne la nota fai doppio clic sulla sottolineatura (o un clic sull'evidenziatura).",
+        )
+        return False
 
     def _titolo_pallino(self, nome_colore: str) -> str:
         """Titolo del pop-up di un pallino: il SIGNIFICATO del colore (es. "● da ripassare")."""
