@@ -23,13 +23,14 @@ from studiopdf.impostazioni import (
     salva_impostazioni,
     tasti_predefiniti,
 )
-from studiopdf.interfaccia.dialogo_percorsi import chiedi_cartella_libri
+from studiopdf.interfaccia.dialogo_percorsi import chiedi_percorsi
 from studiopdf.interfaccia.dialogo_tasti import chiedi_tasti
 from studiopdf.interfaccia.gestore_note import GestoreNote
 from studiopdf.interfaccia.icone import icona_ultimo_libro
 from studiopdf.interfaccia.menu_config import PulsanteConfig
 from studiopdf.interfaccia.vista_pagina import VistaPagina
 from studiopdf.percorsi import cartella_base
+from studiopdf.posizione_note import PosizioneNote, trova_posizione
 from studiopdf.tavolozza import carica_tavolozza
 
 # Limiti e passo dello zoom.
@@ -219,7 +220,12 @@ class FinestraPrincipale(QMainWindow):
             return
 
         try:
-            nuovo_archivio = Archivio.carica(percorso)
+            # Dove stanno le note: accanto al PDF o nella cartella delle note
+            # (e, se la scelta è cambiata, le sposta al posto giusto).
+            posizione = trova_posizione(
+                Path(percorso), self.impostazioni.cartella_note, self.impostazioni.cartella_note_precedente
+            )
+            nuovo_archivio = Archivio.carica_da(posizione.percorso)
         except OSError as errore:  # es. file non disponibile, permessi
             nuovo_documento.chiudi()
             self.avvisa(
@@ -234,13 +240,38 @@ class FinestraPrincipale(QMainWindow):
             self.documento.chiudi()
         self.documento = nuovo_documento
         self.archivio = nuovo_archivio
-        self._avvisa_problemi_archivio()
+        if posizione.sola_lettura:
+            # Cartella delle note non raggiungibile: niente salvataggi, così le
+            # note non finiscono in un posto sbagliato.
+            self.archivio.sola_lettura = True
+            self.archivio.motivo_sola_lettura = "cartella_note_mancante"
         self.statusBar().clearMessage()  # via il messaggio "Apri un PDF…"
+        self._avvisa_problemi_archivio()
+        self._avvisa_posizione_note(posizione)
 
         self.zoom_manuale = False
         self.setWindowTitle(f"{TITOLO} — {self.documento.percorso.name}")
         self._vai_al_segnalibro()
         self._ricorda_ultimo_libro(self.documento.percorso)
+
+    def _avvisa_posizione_note(self, posizione: PosizioneNote) -> None:
+        """Dice all'utente cosa è successo cercando il file delle note."""
+        if posizione.spostate_da is not None:
+            self.statusBar().showMessage(
+                f"Note spostate in {posizione.percorso.parent}", DURATA_MESSAGGI_MS * 2
+            )
+        if posizione.errore_spostamento is not None:
+            self.avvisa(
+                "Note non spostate",
+                f"Non sono riuscito a spostare le note nella cartella scelta:\n{posizione.errore_spostamento}\n\n"
+                f"Per ora uso quelle che stanno qui:\n{posizione.percorso}",
+            )
+        if posizione.altre_note is not None:
+            self.avvisa(
+                "Note in due posti",
+                f"Questo libro ha note in due posti. Uso quelle in:\n{posizione.percorso}\n\n"
+                f"Le altre non sono state toccate:\n{posizione.altre_note}",
+            )
 
     def _ricorda_ultimo_libro(self, percorso: Path) -> None:
         """Salva in config.json che questo è l'ultimo libro aperto.
@@ -288,6 +319,14 @@ class FinestraPrincipale(QMainWindow):
                 "Il file delle note è stato creato da una versione più nuova di StudioPDF.\n"
                 "Il libro si apre, ma le note non vengono mostrate né modificate.",
             )
+        elif self.archivio.motivo_sola_lettura == "cartella_note_mancante":
+            self.avvisa(
+                "Cartella delle note non trovata",
+                f"Non trovo la cartella delle note:\n{self.impostazioni.cartella_note}\n\n"
+                "Forse è su una chiavetta staccata o non ancora sincronizzata.\n"
+                "Il libro si apre, ma le note non vengono mostrate né salvate.\n"
+                "Si può cambiare in ⚙ Config → Percorsi.",
+            )
         elif self.archivio.motivo_sola_lettura == "file_illeggibile":
             self.avvisa(
                 "Note in sola lettura",
@@ -332,12 +371,30 @@ class FinestraPrincipale(QMainWindow):
     # --- Voci del menu ⚙ Config ---
 
     def apri_percorsi(self) -> None:
-        """Finestra «Percorsi»: se l'utente salva, la nuova cartella dei libri vale subito."""
-        cartella = chiedi_cartella_libri(self, self.impostazioni.cartella_libri)
-        if cartella is not None:
-            nuove = deepcopy(self.impostazioni)  # copia: le vecchie restano intatte finché non si applica
-            nuove.cartella_libri = cartella
-            self.applica_impostazioni(nuove)
+        """Finestra «Percorsi»: se l'utente salva, le nuove cartelle valgono subito.
+
+        Se cambia la cartella delle note:
+        - quella di prima viene ricordata come «precedente» (per ritrovare le note rimaste lì);
+        - il libro aperto viene riaperto, così le sue note si spostano SUBITO (stessa pagina).
+        """
+        scelta = chiedi_percorsi(self, self.impostazioni.cartella_libri, self.impostazioni.cartella_note)
+        if scelta is None:
+            return
+        cartella_libri, cartella_note = scelta
+
+        nuove = deepcopy(self.impostazioni)  # copia: le vecchie restano intatte finché non si applica
+        nuove.cartella_libri = cartella_libri
+        cambiata = cartella_note != self.impostazioni.cartella_note
+        if cambiata:
+            if self.impostazioni.cartella_note:
+                nuove.cartella_note_precedente = self.impostazioni.cartella_note
+            nuove.cartella_note = cartella_note
+        self.applica_impostazioni(nuove)
+
+        if cambiata and self.documento is not None:
+            pagina = self.pagina
+            self.apri(self.documento.percorso)
+            self.vai_a(pagina)
 
     def apri_keybinding(self) -> None:
         """Finestra «Keybinding»: se l'utente salva, i nuovi tasti valgono subito."""

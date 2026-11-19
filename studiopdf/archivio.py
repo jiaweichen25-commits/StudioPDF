@@ -2,6 +2,7 @@
 
 Per ogni PDF le note stanno in un file accanto, con lo stesso nome più
 ".note.json":  Analisi1.pdf  ->  Analisi1.pdf.note.json
+oppure nella «cartella delle note» scelta in ⚙ Config (vedi posizione_note.py).
 
 Il file è testo JSON leggibile (e modificabile a mano). Questo modulo:
 - lo legge (Archivio.carica) e lo scrive (Archivio.salva);
@@ -18,6 +19,7 @@ from datetime import date
 from pathlib import Path
 
 from studiopdf.note import Evidenziatura, Nota, NotaSuFrase, Pallino, Rett, Segnalibro, Sottolineatura
+from studiopdf.posizione_note import accanto_al_pdf
 
 # Versione del formato del file. Se un giorno il formato cambia, si alza
 # questo numero: un programma vecchio riconoscerà un file "dal futuro".
@@ -27,14 +29,13 @@ from studiopdf.note import Evidenziatura, Nota, NotaSuFrase, Pallino, Rett, Segn
 # I file delle versioni 1 e 2 si leggono ancora; si salva sempre nella versione 3.
 VERSIONE = 3
 
-ESTENSIONE_NOTE = ".note.json"
 
 
 class Archivio:
     """Tutte le note di un libro, più il percorso del file in cui stanno."""
 
     def __init__(self, percorso_note: Path) -> None:
-        # Di solito non si crea un Archivio così, ma con Archivio.carica(pdf).
+        # Di solito non si crea un Archivio così, ma con Archivio.carica(pdf) o carica_da(file).
         self.percorso_note = percorso_note
         self.segnalibro: Segnalibro | None = None
         self.sottolineature: list[Sottolineatura] = []
@@ -56,8 +57,17 @@ class Archivio:
 
     @classmethod
     def carica(cls, percorso_pdf: str | Path) -> "Archivio":
-        """Carica le note del PDF indicato (o un archivio vuoto se non ce ne sono)."""
-        archivio = cls(Path(str(percorso_pdf) + ESTENSIONE_NOTE))
+        """Carica le note che stanno ACCANTO al PDF indicato (o un archivio vuoto se non ce ne sono)."""
+        return cls.carica_da(accanto_al_pdf(Path(percorso_pdf)))
+
+    @classmethod
+    def carica_da(cls, percorso_note: Path) -> "Archivio":
+        """Carica le note dal file indicato (o un archivio vuoto se il file non c'è).
+
+        Il file può stare ovunque: accanto al PDF oppure nella cartella delle
+        note (dove sta lo decide posizione_note.trova_posizione).
+        """
+        archivio = cls(Path(percorso_note))
 
         if not archivio.percorso_note.exists():
             return archivio  # libro senza note: archivio vuoto

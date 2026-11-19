@@ -8,7 +8,8 @@ Un lettore PDF minimale per **studiare libri**, scritto in Python (PySide6 + PyM
 - **Pallini colorati nel margine** con note e sintesi; ogni colore ha un significato scelto da te.
 
 Il PDF originale **non viene mai modificato**: le note stanno in un file JSON accanto al PDF
-(`Libro.pdf` → `Libro.pdf.note.json`), leggibile e modificabile a mano.
+(`Libro.pdf` → `Libro.pdf.note.json`), leggibile e modificabile a mano. Se preferisci, tutte le note
+possono stare in **una cartella a scelta** (⚙ Config → Percorsi): le note già scritte si spostano da sole.
 
 ## Come si usa
 
@@ -22,6 +23,7 @@ Il PDF originale **non viene mai modificato**: le note stanno in un file JSON ac
 | Evidenziare una frase | trascina sulla frase, poi scegli il colore nel menu (o premi il suo tasto: `1`, `2`, `3`…) |
 | Leggere / modificare un'evidenziatura | un clic sull'evidenziatura |
 | Segnalibro | clic destro sulla parola → Segnalibro qui (anche su una parola sottolineata o evidenziata) |
+| Cartella delle note | ⚙ Config → Percorsi → Cartella delle note (vuota = accanto a ogni PDF) |
 | Nuovo pallino | clic sinistro nel margine, poi scegli il colore |
 | Salvare la nota nel pop-up | `Invio` (per andare a capo `Shift+Invio`); il tasto si cambia in ⚙ Config → Keybinding |
 | Leggere una nota | passa il mouse sopra la sottolineatura o il pallino (anteprima) |
@@ -83,7 +85,8 @@ studiopdf/
   documento.py              lettura del PDF (PyMuPDF)
   archivio.py               il file .note.json
   tavolozza.py              i colori in config.json
-  percorsi.py               dove stanno i file
+  percorsi.py               dove stanno i file del programma
+  posizione_note.py         dove sta il file delle note di un libro (e spostarlo)
   impostazioni.py           cartella dei libri, tasti e interruttori (in config.json)
   interfaccia/              la parte grafica (PySide6)
     finestra.py             finestra principale

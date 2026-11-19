@@ -2,7 +2,8 @@
 
 Stanno in config.json (lo stesso file della tavolozza), in tre sezioni:
 
-    "percorsi": {"cartella_libri": "C:/Libri", "ultimo_libro": "C:/Libri/Analisi1.pdf"}
+    "percorsi": {"cartella_libri": "C:/Libri", "ultimo_libro": "C:/Libri/Analisi1.pdf",
+                 "cartella_note": "", "cartella_note_precedente": ""}
     "tasti":    {"pagina_successiva": ["Right", "PgDown"], ...}
     "opzioni":  {"frecce_laterali": true, "anteprima_note": true}
 
@@ -72,6 +73,10 @@ class ErroreImpostazioni(Exception):
 class Impostazioni:
     cartella_libri: str = ""  # da dove parte "Apri…" ("" = posizione predefinita di Windows)
     ultimo_libro: str = ""  # percorso dell'ultimo PDF aperto ("" = nessuno ancora)
+    cartella_note: str = ""  # dove salvare le note ("" = accanto a ogni PDF)
+    # La cartella delle note usata PRIMA dell'ultima modifica: serve per ritrovare
+    # (e spostare) le note rimaste lì. Vedi posizione_note.trova_posizione.
+    cartella_note_precedente: str = ""
     tasti: dict[str, list[str]] = field(default_factory=dict)  # azione -> [tasto 1, tasto 2]
     frecce_laterali: bool = True  # frecce ‹ › ai lati della pagina
     anteprima_note: bool = True  # schedina passando il mouse su una nota
@@ -141,6 +146,8 @@ def carica_impostazioni(cartella: Path, tavolozza: list[Colore]) -> Impostazioni
     return Impostazioni(
         cartella_libri=_testo_o(percorsi.get("cartella_libri"), ""),
         ultimo_libro=_testo_o(percorsi.get("ultimo_libro"), ""),
+        cartella_note=_testo_o(percorsi.get("cartella_note"), ""),
+        cartella_note_precedente=_testo_o(percorsi.get("cartella_note_precedente"), ""),
         tasti=tasti,
         frecce_laterali=_vero_falso_o(opzioni.get("frecce_laterali"), True),
         anteprima_note=_vero_falso_o(opzioni.get("anteprima_note"), True),
@@ -207,6 +214,8 @@ def salva_impostazioni(cartella: Path, impostazioni: Impostazioni) -> None:
     dati["percorsi"] = {
         "cartella_libri": impostazioni.cartella_libri,
         "ultimo_libro": impostazioni.ultimo_libro,
+        "cartella_note": impostazioni.cartella_note,
+        "cartella_note_precedente": impostazioni.cartella_note_precedente,
     }
     dati["tasti"] = impostazioni.tasti
     dati["opzioni"] = {
