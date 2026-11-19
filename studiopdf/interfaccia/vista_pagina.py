@@ -56,7 +56,10 @@ class VistaPagina(QGraphicsView):
     zoomRichiesto = Signal(int)  # Ctrl+rotellina: +1 ingrandisci, -1 rimpicciolisci
     menuParola = Signal(object, QPoint)  # clic destro su una parola: (Parola, posizione sullo schermo)
     selezioneFatta = Signal(object, QPoint)  # frase selezionata trascinando: (lista di Parola, posizione sullo schermo)
-    menuNota = Signal(str, QPoint)  # clic destro su una nota: (id, posizione sullo schermo)
+    # Clic destro su una nota: (id, posizione sullo schermo, Parola sotto il mouse oppure None).
+    # La parola serve per «Segnalibro qui» su una parola già sottolineata o evidenziata;
+    # è None su un pallino (nel margine non ci sono parole).
+    menuNota = Signal(str, QPoint, object)
     clicNota = Signal(str)  # DOPPIO clic su una nota: id della nota (per modificarla)
     notaSorvolata = Signal(str, QPoint)  # il mouse è appena arrivato su una nota: (id, posizione sullo schermo)
     notaLasciata = Signal()  # il mouse ha lasciato la nota
@@ -210,16 +213,17 @@ class VistaPagina(QGraphicsView):
     def gestisci_clic_destro(self, punto: QPointF, posizione_schermo: QPoint) -> None:
         """Clic destro nel punto (in coordinate PDF).
 
-        Su una nota -> menu della nota (modifica / elimina).
+        Su una nota -> menu della nota (modifica / elimina, e segnalibro se sotto c'è una parola).
         Su una parola -> menu della parola (segnalibro).
         """
         if self._documento is None:
             return
+        # La parola sotto il mouse (None se non c'è, es. su un pallino nel margine).
+        parola = self._documento.parola_in(self._pagina, punto.x(), punto.y())
         id_nota = self._id_nota_in(punto)
         if id_nota is not None:
-            self.menuNota.emit(id_nota, posizione_schermo)
+            self.menuNota.emit(id_nota, posizione_schermo, parola)
             return
-        parola = self._documento.parola_in(self._pagina, punto.x(), punto.y())
         if parola is None:
             self.messaggio.emit("nessuna parola qui")
         else:

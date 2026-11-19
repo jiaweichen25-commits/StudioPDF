@@ -21,7 +21,7 @@ Il PDF originale **non viene mai modificato**: le note stanno in un file JSON ac
 | Sottolineare una frase | trascina il mouse con il tasto sinistro dalla prima all'ultima parola, poi «Sottolinea e spiega…» |
 | Evidenziare una frase | trascina sulla frase, poi scegli il colore nel menu (o premi il suo tasto: `1`, `2`, `3`…) |
 | Leggere / modificare un'evidenziatura | un clic sull'evidenziatura |
-| Segnalibro | clic destro sulla parola → Segnalibro qui |
+| Segnalibro | clic destro sulla parola → Segnalibro qui (anche su una parola sottolineata o evidenziata) |
 | Nuovo pallino | clic sinistro nel margine, poi scegli il colore |
 | Salvare la nota nel pop-up | `Invio` (per andare a capo `Shift+Invio`); il tasto si cambia in ⚙ Config → Keybinding |
 | Leggere una nota | passa il mouse sopra la sottolineatura o il pallino (anteprima) |

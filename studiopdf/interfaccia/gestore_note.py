@@ -84,18 +84,32 @@ class GestoreNote:
     # Menu del clic destro su una nota
     # =========================================================================
 
-    def quando_menu_nota(self, id: str, posizione: QPoint) -> None:
+    def quando_menu_nota(self, id: str, posizione: QPoint, parola: Parola | None = None) -> None:
+        """Clic destro su una nota: Modifica… / Elimina, e «Segnalibro qui».
+
+        parola = la parola sotto il mouse. Se c'è (cioè su una sottolineatura o
+        un'evidenziatura) si può mettere il segnalibro proprio su quella parola,
+        anche se fa parte di una nota. Su un pallino è None: niente segnalibro.
+        """
         self.nascondi_anteprima()
         menu = QMenu(self.finestra)
         azione_modifica = menu.addAction("Modifica…")
         menu.addSeparator()
         azione_elimina = menu.addAction("Elimina")
+        azione_segnalibro = None
+        if parola is not None:
+            menu.addSeparator()
+            azione_segnalibro = menu.addAction("Segnalibro qui")
 
-        scelta = menu.exec(posizione)
+        scelta = self.mostra_menu(menu, posizione)
+        if scelta is None:
+            return  # menu chiuso senza scegliere
         if scelta is azione_modifica:
             self.apri_nota(id)
         elif scelta is azione_elimina:
             self.elimina_nota(id)
+        elif scelta is azione_segnalibro:
+            self.metti_segnalibro(parola)
 
     def elimina_nota(self, id: str) -> None:
         """Elimina una nota, dopo aver chiesto conferma."""
