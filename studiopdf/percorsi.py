@@ -16,3 +16,16 @@ def cartella_base() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent
+
+
+def cartella_assets() -> Path:
+    """La cartella assets/ con le icone (file .svg).
+
+    - Eseguibile creato con PyInstaller: i file aggiunti con "datas" in
+      StudioPDF.spec finiscono nella cartella interna del programma
+      (dist/StudioPDF/_internal), che PyInstaller indica con sys._MEIPASS.
+    - Durante lo sviluppo: la cartella assets/ del progetto.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "assets"
+    return Path(__file__).resolve().parent.parent / "assets"

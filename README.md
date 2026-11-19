@@ -69,7 +69,7 @@ python main.py                 # avvia il programma
 ### Creare l'eseguibile Windows
 
 ```powershell
-pyinstaller --noconfirm --windowed --name StudioPDF main.py
+pyinstaller --noconfirm --windowed --name StudioPDF --add-data "assets;assets" main.py
 ```
 
 Il programma si trova in `dist\StudioPDF\StudioPDF.exe`: si può copiare l'intera cartella dove si vuole.
@@ -90,7 +90,7 @@ studiopdf/
     vista_pagina.py         la pagina e i clic
     selezione.py            la frase selezionata trascinando il mouse
     menu_tasti.py           menu in cui un tasto sceglie una voce
-    icone.py                le icone (disegnate in SVG)
+    icone.py                legge le icone da assets/
     disegno.py              sottolineature, pallini, segnalibro
     gestore_note.py         creare / modificare / eliminare note
     popup.py                la finestrella per scrivere le note
@@ -100,6 +100,7 @@ studiopdf/
     dialogo_percorsi.py     la finestra «Percorsi»
     dialogo_tasti.py        la finestra «Keybinding»
     traduzioni.py           i testi di Qt in italiano
+assets/                     le icone (file .svg, modificabili con un programma di grafica)
 ```
 
 ## Licenza
