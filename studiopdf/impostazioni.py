@@ -2,7 +2,7 @@
 
 Stanno in config.json (lo stesso file della tavolozza), in tre sezioni:
 
-    "percorsi": {"cartella_libri": "C:/Libri"}
+    "percorsi": {"cartella_libri": "C:/Libri", "ultimo_libro": "C:/Libri/Analisi1.pdf"}
     "tasti":    {"pagina_successiva": ["Right", "PgDown"], ...}
     "opzioni":  {"frecce_laterali": true, "anteprima_note": true}
 
@@ -34,6 +34,7 @@ AZIONI_FISSE: list[tuple[str, str]] = [
     ("ingrandisci", "Ingrandisci"),
     ("rimpicciolisci", "Rimpicciolisci"),
     ("apri_libro", "Apri libro"),
+    ("apri_ultimo_libro", "Apri l'ultimo libro"),
     ("chiudi_programma", "Chiudi programma"),
     # Questa vale solo DENTRO il pop-up della nota (vedi interfaccia/popup.py),
     # non nella finestra principale.
@@ -51,6 +52,7 @@ _TASTI_FISSI: dict[str, list[str]] = {
     "ingrandisci": ["+", "Ctrl++"],
     "rimpicciolisci": ["-", "Ctrl+-"],
     "apri_libro": ["Ctrl+O", ""],
+    "apri_ultimo_libro": ["Ctrl+Shift+O", ""],  # vicino a Ctrl+O, che apre un libro qualsiasi
     "chiudi_programma": ["Ctrl+W", ""],
     "salva_nota": TASTI_SALVA_NOTA,
 }
@@ -69,6 +71,7 @@ class ErroreImpostazioni(Exception):
 @dataclass
 class Impostazioni:
     cartella_libri: str = ""  # da dove parte "Apri…" ("" = posizione predefinita di Windows)
+    ultimo_libro: str = ""  # percorso dell'ultimo PDF aperto ("" = nessuno ancora)
     tasti: dict[str, list[str]] = field(default_factory=dict)  # azione -> [tasto 1, tasto 2]
     frecce_laterali: bool = True  # frecce ‹ › ai lati della pagina
     anteprima_note: bool = True  # schedina passando il mouse su una nota
@@ -137,6 +140,7 @@ def carica_impostazioni(cartella: Path, tavolozza: list[Colore]) -> Impostazioni
 
     return Impostazioni(
         cartella_libri=_testo_o(percorsi.get("cartella_libri"), ""),
+        ultimo_libro=_testo_o(percorsi.get("ultimo_libro"), ""),
         tasti=tasti,
         frecce_laterali=_vero_falso_o(opzioni.get("frecce_laterali"), True),
         anteprima_note=_vero_falso_o(opzioni.get("anteprima_note"), True),
@@ -200,7 +204,10 @@ def salva_impostazioni(cartella: Path, impostazioni: Impostazioni) -> None:
         dati = {}
 
     # Si aggiornano solo le nostre tre sezioni.
-    dati["percorsi"] = {"cartella_libri": impostazioni.cartella_libri}
+    dati["percorsi"] = {
+        "cartella_libri": impostazioni.cartella_libri,
+        "ultimo_libro": impostazioni.ultimo_libro,
+    }
     dati["tasti"] = impostazioni.tasti
     dati["opzioni"] = {
         "frecce_laterali": impostazioni.frecce_laterali,

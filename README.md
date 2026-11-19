@@ -14,7 +14,8 @@ Il PDF originale **non viene mai modificato**: le note stanno in un file JSON ac
 
 | Azione | Come |
 |---|---|
-| Aprire un libro | File → Apri… (`Ctrl+O`), oppure *Apri con…* di Windows |
+| Aprire un libro | File → Apri… (`Ctrl+O`), oppure *Apri con…* di Windows: parte già dalla cartella dell'ultimo libro, con il file selezionato |
+| Riaprire l'ultimo libro | l'icona del libro in alto a sinistra (passandoci sopra vedi il nome), File → Apri l'ultimo libro, oppure `Ctrl+Shift+O` |
 | Sfogliare | `←` `→`, `PagSu` `PagGiù`, i pulsanti in alto, oppure le frecce ‹ › che compaiono avvicinando il mouse ai bordi |
 | Zoom | `+` `-`, i pulsanti in alto, oppure `Ctrl` + rotellina |
 | Sottolineare una frase | trascina il mouse con il tasto sinistro dalla prima all'ultima parola, poi «Sottolinea e spiega…» |
@@ -89,6 +90,7 @@ studiopdf/
     vista_pagina.py         la pagina e i clic
     selezione.py            la frase selezionata trascinando il mouse
     menu_tasti.py           menu in cui un tasto sceglie una voce
+    icone.py                le icone (disegnate in SVG)
     disegno.py              sottolineature, pallini, segnalibro
     gestore_note.py         creare / modificare / eliminare note
     popup.py                la finestrella per scrivere le note

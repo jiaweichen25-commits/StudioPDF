@@ -26,6 +26,7 @@ from studiopdf.impostazioni import (
 from studiopdf.interfaccia.dialogo_percorsi import chiedi_cartella_libri
 from studiopdf.interfaccia.dialogo_tasti import chiedi_tasti
 from studiopdf.interfaccia.gestore_note import GestoreNote
+from studiopdf.interfaccia.icone import icona_ultimo_libro
 from studiopdf.interfaccia.menu_config import PulsanteConfig
 from studiopdf.interfaccia.vista_pagina import VistaPagina
 from studiopdf.percorsi import cartella_base
@@ -79,6 +80,8 @@ class FinestraPrincipale(QMainWindow):
 
         # Tasti e interruttori dalle impostazioni (senza riscriverle: sono appena state lette).
         self.applica_impostazioni(self.impostazioni, salva=False)
+        # Il pulsante «ultimo libro» sa già quale libro riaprire (ma non lo apre da solo).
+        self._aggiorna_pulsante_ultimo_libro()
 
     # =========================================================================
     # Costruzione dell'interfaccia
@@ -105,6 +108,12 @@ class FinestraPrincipale(QMainWindow):
         azione_apri = menu_file.addAction("&Apri…")
         azione_apri.triggered.connect(self.scegli_e_apri)
 
+        # «Apri l'ultimo libro»: la STESSA azione sta qui nel menu e, come icona,
+        # nella barra in alto (vedi _crea_barra_strumenti). Anche il suo tasto è
+        # configurabile (azione "apri_ultimo_libro" in Keybinding).
+        self.azione_ultimo_libro = menu_file.addAction(icona_ultimo_libro(), "Apri l'&ultimo libro")
+        self.azione_ultimo_libro.triggered.connect(self.apri_ultimo_libro)
+
         menu_file.addSeparator()
         azione_esci = menu_file.addAction("&Esci")
         azione_esci.triggered.connect(self.close)
@@ -115,6 +124,11 @@ class FinestraPrincipale(QMainWindow):
         barra.setMovable(False)
         self.addToolBar(barra)
         self.barra_strumenti = barra
+
+        # Per primo, il libro con cui riaprire l'ultimo PDF. Nella barra si vede
+        # solo l'icona; passandoci sopra il mouse compare il nome del libro.
+        barra.addAction(self.azione_ultimo_libro)
+        barra.addSeparator()
 
         self.azione_precedente = barra.addAction("◀  Indietro")
         self.azione_successiva = barra.addAction("Avanti  ▶")
@@ -157,9 +171,40 @@ class FinestraPrincipale(QMainWindow):
             self.apri(percorso)
 
     def cartella_iniziale_apri(self) -> str:
-        """La cartella da cui parte "Apri…": quella dei libri, se esiste ("" = predefinita di Windows)."""
+        """Da dove parte "Apri…".
+
+        1. Se l'ultimo libro aperto esiste ancora: il suo percorso COMPLETO. Ricevendo
+           un file (e non una cartella), la finestra di Windows apre la sua cartella
+           con quel file già selezionato: basta premere Invio.
+        2. Altrimenti la cartella dei libri (⚙ Config → Percorsi), se esiste.
+        3. Altrimenti "" = la posizione predefinita di Windows.
+        """
+        ultimo = self.impostazioni.ultimo_libro
+        if ultimo and Path(ultimo).is_file():
+            return ultimo
         cartella = self.impostazioni.cartella_libri
         return cartella if cartella and Path(cartella).is_dir() else ""
+
+    def apri_ultimo_libro(self) -> None:
+        """Riapre l'ultimo libro aperto, senza passare dalla finestra di scelta."""
+        percorso = self.impostazioni.ultimo_libro
+        if not percorso:
+            return  # nessun libro aperto finora (il pulsante è spento)
+
+        if not Path(percorso).is_file():
+            self.avvisa(
+                "Libro non trovato",
+                f"Non trovo più «{Path(percorso).name}»:\n{percorso}\n\n"
+                "Forse è stato spostato o rinominato: aprilo con File → Apri…",
+            )
+            self._aggiorna_pulsante_ultimo_libro()  # ora il pulsante si spegne
+            return
+
+        if self.documento is not None and self.documento.percorso.resolve() == Path(percorso).resolve():
+            self.statusBar().showMessage(f"«{Path(percorso).stem}» è già aperto.", DURATA_MESSAGGI_MS)
+            return
+
+        self.apri(percorso)
 
     def apri(self, percorso: str | Path) -> None:
         """Apre il PDF indicato insieme alle sue note.
@@ -195,6 +240,29 @@ class FinestraPrincipale(QMainWindow):
         self.zoom_manuale = False
         self.setWindowTitle(f"{TITOLO} — {self.documento.percorso.name}")
         self._vai_al_segnalibro()
+        self._ricorda_ultimo_libro(self.documento.percorso)
+
+    def _ricorda_ultimo_libro(self, percorso: Path) -> None:
+        """Salva in config.json che questo è l'ultimo libro aperto.
+
+        Si salva SUBITO all'apertura (e non alla chiusura del programma):
+        così vale anche se il programma si chiude male.
+        """
+        nuove = deepcopy(self.impostazioni)
+        nuove.ultimo_libro = str(Path(percorso).resolve())  # percorso completo, senza ".." o simili
+        self.applica_impostazioni(nuove)
+        self._aggiorna_pulsante_ultimo_libro()
+
+    def _aggiorna_pulsante_ultimo_libro(self) -> None:
+        """Accende il pulsante solo se c'è un ultimo libro e il file esiste ancora.
+
+        Il suggerimento (che compare passando il mouse) è il nome del libro,
+        senza ".pdf": es. «AI Engineering».
+        """
+        percorso = self.impostazioni.ultimo_libro
+        esiste = bool(percorso) and Path(percorso).is_file()
+        self.azione_ultimo_libro.setEnabled(esiste)
+        self.azione_ultimo_libro.setToolTip(Path(percorso).stem if esiste else "Nessun libro da riaprire")
 
     def _vai_al_segnalibro(self) -> None:
         """Apre il libro dove ci si era fermati (o a pagina 1 se non c'è segnalibro)."""
@@ -317,6 +385,7 @@ class FinestraPrincipale(QMainWindow):
             "ingrandisci": lambda: self.cambia_zoom(+1),
             "rimpicciolisci": lambda: self.cambia_zoom(-1),
             "apri_libro": self.scegli_e_apri,
+            "apri_ultimo_libro": self.apri_ultimo_libro,
             "chiudi_programma": self.close,
         }
         if azione in funzioni:
