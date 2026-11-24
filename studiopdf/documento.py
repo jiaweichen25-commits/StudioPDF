@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pymupdf
 
+from studiopdf.indice import VoceIndice
 from studiopdf.note import Rett
 
 
@@ -151,6 +152,22 @@ class Documento:
             if x0 <= x <= x1 and y0 <= y <= y1:
                 return parola
         return None
+
+    # --- Indice ---------------------------------------------------------------
+
+    def indice(self) -> list[VoceIndice]:
+        """L'indice scritto dentro il PDF (vuoto se il PDF non ne ha uno).
+
+        Le voci che portano a una pagina che non esiste (PyMuPDF dà -1, oppure un
+        numero oltre l'ultima pagina) restano, ma con pagina None: non si possono cliccare.
+        """
+        voci = []
+        # get_toc() dà [livello, titolo, pagina] con le pagine contate da 1, come noi.
+        for livello, titolo, pagina in self._pdf.get_toc(simple=True):
+            valida = isinstance(pagina, int) and 1 <= pagina <= self.numero_pagine
+            # split + join: via a-capo e spazi doppi, che alcuni PDF mettono nei titoli.
+            voci.append(VoceIndice(livello, " ".join(str(titolo).split()), pagina if valida else None))
+        return voci
 
     # --- Chiusura -------------------------------------------------------------
 
