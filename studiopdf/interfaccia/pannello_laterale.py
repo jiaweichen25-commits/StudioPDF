@@ -118,7 +118,8 @@ class PannelloLaterale(QDockWidget):
             riga.setData(0, RUOLO_DESTINAZIONE, (segno.pagina, rett))
         if not segni:
             self._messaggio(self.voce_segnati, NESSUN_SEGNO)
-        self.voce_segnati.setExpanded(True)
+        # NON si riapre la sezione: se l'utente l'ha chiusa, resta chiusa
+        # (si apre da sola solo con un libro nuovo, in mostra_libro).
 
         # Il pallino accanto alle voci dell'indice che contengono una pagina segnata.
         colore_segno = next((c.colore for c in tavolozza if c.segna_pagina), COLORE_SEGNO_PREDEFINITO)
@@ -132,11 +133,31 @@ class PannelloLaterale(QDockWidget):
         if posizione is None:
             self.albero.setCurrentItem(None)
             return
-        riga = self._righe_indice[posizione]
+        riga = self._riga_visibile(self._righe_indice[posizione])
+        if riga is None:
+            self.albero.setCurrentItem(None)  # «Indice» è chiuso: non si riapre
+            return
         # setCurrentItem non emette itemClicked, quindi non si torna a cambiare pagina:
         # il pannello segue la pagina, non la comanda.
         self.albero.setCurrentItem(riga)
-        self.albero.scrollToItem(riga)  # se serve apre i rami e scorre fino alla voce
+        self.albero.scrollToItem(riga)  # scorre fino alla voce (è visibile: niente si riapre)
+
+    def _riga_visibile(self, riga: QTreeWidgetItem) -> QTreeWidgetItem | None:
+        """La riga stessa se si vede; altrimenti il capitolo CHIUSO più esterno che la contiene.
+
+        Es. si è in «1.1» ma «Cap 1» è chiuso: si evidenzia «Cap 1» senza riaprirlo
+        (i rami chiusi dall'utente restano chiusi). None se è chiusa tutta la sezione «Indice».
+        """
+        antenati = []  # dal genitore diretto fino a «Indice» compreso
+        genitore = riga.parent()
+        while genitore is not None:
+            antenati.append(genitore)
+            genitore = genitore.parent()
+        visibile = riga
+        for antenato in antenati:  # dal più interno al più esterno: vince l'ultimo chiuso trovato
+            if not antenato.isExpanded():
+                visibile = antenato
+        return None if visibile is self.voce_indice else visibile
 
     def svuota(self) -> None:
         """Nessun libro aperto: le due sezioni restano, vuote."""
