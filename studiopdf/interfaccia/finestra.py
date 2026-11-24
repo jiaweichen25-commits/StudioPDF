@@ -8,7 +8,7 @@ la barra di stato e gli avvisi. Cosa succede quando si clicca una nota
 from copy import deepcopy
 from pathlib import Path
 
-from PySide6.QtCore import QEvent
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QFileDialog, QLabel, QMainWindow, QMessageBox, QToolBar
 
@@ -25,8 +25,10 @@ from studiopdf.impostazioni import (
 from studiopdf.interfaccia.dialogo_percorsi import chiedi_percorsi
 from studiopdf.interfaccia.dialogo_tasti import chiedi_tasti
 from studiopdf.interfaccia.gestore_note import GestoreNote
-from studiopdf.interfaccia.icone import icona_ultimo_libro
+from studiopdf.indice import segni
+from studiopdf.interfaccia.icone import icona_pannello, icona_ultimo_libro
 from studiopdf.interfaccia.menu_config import PulsanteConfig
+from studiopdf.interfaccia.pannello_laterale import LARGHEZZA_INIZIALE, PannelloLaterale
 from studiopdf.interfaccia.vista_pagina import VistaPagina
 from studiopdf.percorsi import cartella_base
 from studiopdf.posizione_note import PosizioneNote, trova_posizione
@@ -70,6 +72,11 @@ class FinestraPrincipale(QMainWindow):
         self.vista = VistaPagina(self)
         self.setCentralWidget(self.vista)
 
+        # --- Il pannello a sinistra: «Segnati» e l'indice del libro ---
+        self.pannello = PannelloLaterale(self)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.pannello)
+        self.resizeDocks([self.pannello], [LARGHEZZA_INIZIALE], Qt.Orientation.Horizontal)
+
         # --- Chi gestisce le note ---
         self.gestore_note = GestoreNote(self)
 
@@ -99,6 +106,8 @@ class FinestraPrincipale(QMainWindow):
         self.vista.richiestaPaginaPrecedente.connect(self.pagina_precedente)
         self.vista.richiestaPaginaSuccessiva.connect(self.pagina_successiva)
         self.vista.messaggio.connect(lambda testo: self.statusBar().showMessage(testo, DURATA_MESSAGGI_MS))
+        # Clic su una voce del pannello laterale.
+        self.pannello.vaiA.connect(self._vai_al_segno)
 
     def _crea_menu(self) -> None:
         menu_file = self.menuBar().addMenu("&File")
@@ -124,7 +133,15 @@ class FinestraPrincipale(QMainWindow):
         self.addToolBar(barra)
         self.barra_strumenti = barra
 
-        # Per primo, il libro con cui riaprire l'ultimo PDF. Nella barra si vede
+        # Per primo, come in Firefox, il pulsante che mostra/nasconde il pannello
+        # laterale. È "checkable": resta premuto finché il pannello è aperto.
+        self.azione_pannello = barra.addAction(icona_pannello(), "Pannello")
+        self.azione_pannello.setCheckable(True)
+        self.azione_pannello.setToolTip("Mostra/nascondi il pannello laterale (segnati e indice)")
+        # "triggered" arriva dai clic (e da trigger(), usato dal tasto F4), non da setChecked().
+        self.azione_pannello.triggered.connect(self._quando_pulsante_pannello)
+
+        # Poi il libro con cui riaprire l'ultimo PDF. Nella barra si vede
         # solo l'icona; passandoci sopra il mouse compare il nome del libro.
         barra.addAction(self.azione_ultimo_libro)
         barra.addSeparator()
@@ -249,6 +266,8 @@ class FinestraPrincipale(QMainWindow):
 
         self.zoom_manuale = False
         self.setWindowTitle(f"{TITOLO} — {self.documento.percorso.name}")
+        # L'indice del nuovo libro nel pannello (i Segnati arrivano con ridisegna_note).
+        self.pannello.mostra_libro(self.documento.indice())
         self._vai_al_segnalibro()
         self._ricorda_ultimo_libro(self.documento.percorso)
 
@@ -349,6 +368,8 @@ class FinestraPrincipale(QMainWindow):
         self.pulsante_config.azione_frecce.setChecked(nuove.frecce_laterali)
         self.pulsante_config.azione_anteprima.setChecked(nuove.anteprima_note)
         self.vista.frecce_attive = nuove.frecce_laterali
+        self.azione_pannello.setChecked(nuove.pannello_laterale)
+        self.pannello.setVisible(nuove.pannello_laterale)
         self.gestore_note.anteprima_attiva = nuove.anteprima_note
         if not nuove.frecce_laterali:
             self.vista.nascondi_frecce()
@@ -409,6 +430,12 @@ class FinestraPrincipale(QMainWindow):
         nuove.frecce_laterali = attivo
         self.applica_impostazioni(nuove)
 
+    def _quando_pulsante_pannello(self, attivo: bool) -> None:
+        """Pulsante del pannello (o F4): lo mostra o lo nasconde, e lo ricorda in config.json."""
+        nuove = deepcopy(self.impostazioni)
+        nuove.pannello_laterale = attivo
+        self.applica_impostazioni(nuove)
+
     def _quando_interruttore_anteprima(self, attivo: bool) -> None:
         nuove = deepcopy(self.impostazioni)
         nuove.anteprima_note = attivo
@@ -442,6 +469,8 @@ class FinestraPrincipale(QMainWindow):
             "apri_libro": self.scegli_e_apri,
             "apri_ultimo_libro": self.apri_ultimo_libro,
             "chiudi_programma": self.close,
+            # trigger() = come un clic sul pulsante: cambia la spunta e avvisa _quando_pulsante_pannello.
+            "pannello_laterale": self.azione_pannello.trigger,
         }
         # I tasti dei colori ("colore_<nome>") non hanno una funzione qui: valgono
         # solo nel menu che compare dopo aver selezionato una frase (gestore_note.py).
@@ -489,6 +518,7 @@ class FinestraPrincipale(QMainWindow):
         if self.documento is None:
             return
         self.vista.mostra_pagina(self.documento, self.pagina, self.zoom)
+        self.pannello.segui_pagina(self.pagina)  # evidenzia il capitolo in cui si è
         self.ridisegna_note()
         self.etichetta_pagina.setText(f"pagina {self.pagina} / {self.documento.numero_pagine}")
 
@@ -507,6 +537,14 @@ class FinestraPrincipale(QMainWindow):
             self.tavolozza,
             evidenziature=self.archivio.evidenziature_della_pagina(self.pagina),
         )
+        # Le note sono cambiate (o si è cambiata pagina): si aggiornano anche i Segnati.
+        self.pannello.mostra_segni(segni(self.archivio.evidenziature, self.tavolozza), self.tavolozza)
+
+    def _vai_al_segno(self, pagina: int, rett) -> None:
+        """Clic su una voce del pannello: si va alla pagina e, se è un segno, si scorre fino alla frase."""
+        self.vai_a(pagina)
+        if rett is not None and self.pagina == pagina:
+            self.vista.mostra_rettangolo(rett)
 
     def avvisa(self, titolo: str, testo: str) -> None:
         """Mostra un messaggio di avviso (finestrella con OK)."""
