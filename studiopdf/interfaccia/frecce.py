@@ -2,8 +2,7 @@
 
 Stanno a metà altezza, sul bordo sinistro (pagina precedente) e destro
 (pagina successiva), e compaiono solo quando il mouse arriva proprio sul
-bordo. Sono strette apposta: così non coprono il margine della pagina,
-dove si clicca per mettere i pallini.
+bordo. Sono strette apposta: così coprono il meno possibile della pagina.
 """
 
 from PySide6.QtCore import Qt
@@ -17,7 +16,7 @@ ALTEZZA = 88
 DISTANZA_DAL_BORDO = 1
 
 # Quanto vicino al bordo (in pixel) deve arrivare il mouse perché la freccia compaia.
-# Poco: il margine della pagina, dove si mettono i pallini, deve restare libero.
+# Poco: la freccia deve comparire solo quando si cerca davvero il bordo.
 ZONA_SENSIBILE = 24
 
 STILE = """

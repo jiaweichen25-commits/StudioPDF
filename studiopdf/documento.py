@@ -18,10 +18,6 @@ import pymupdf
 from studiopdf.note import Rett
 
 
-# Quando una pagina non ha testo non si sa dove sia il margine:
-# si considera margine il 15% della larghezza a sinistra e a destra.
-FASCIA_MARGINE_SENZA_TESTO = 0.15
-
 # Espressione regolare per la punteggiatura all'inizio (^...) o alla fine (...$)
 # di una parola. [^\w] significa "qualsiasi carattere che NON sia lettera o cifra".
 _PUNTEGGIATURA_AI_BORDI = re.compile(r"^[^\w]+|[^\w]+$")
@@ -156,37 +152,6 @@ class Documento:
                 return parola
         return None
 
-    # --- Margini ---------------------------------------------------------------
-
-    def limiti_testo(self, pagina: int) -> tuple[float, float] | None:
-        """(x_min, x_max): dove inizia e dove finisce il testo in orizzontale.
-
-        Restituisce None se la pagina non contiene parole.
-        """
-        parole = self.parole(pagina)
-        if not parole:
-            return None
-        x_min = min(parola.rett[0] for parola in parole)
-        x_max = max(parola.rett[2] for parola in parole)
-        return (x_min, x_max)
-
-    def lato_margine(self, pagina: int, x: float) -> str | None:
-        """Dice se la coordinata x cade nel margine sinistro ("sx"), destro ("dx") o in nessuno dei due (None)."""
-        inizio, fine = self._fasce_margine(pagina)
-        if x < inizio:
-            return "sx"
-        if x > fine:
-            return "dx"
-        return None
-
-    def centro_margine(self, pagina: int, lato: str) -> float:
-        """La x a metà del margine indicato: è lì che si disegnano i pallini."""
-        larghezza, _ = self.dimensione_pagina(pagina)
-        inizio, fine = self._fasce_margine(pagina)
-        if lato == "sx":
-            return inizio / 2  # a metà tra il bordo (0) e l'inizio del testo
-        return (fine + larghezza) / 2  # a metà tra la fine del testo e il bordo destro
-
     # --- Chiusura -------------------------------------------------------------
 
     def chiudi(self) -> None:
@@ -199,13 +164,3 @@ class Documento:
         if not 1 <= pagina <= self.numero_pagine:
             raise ValueError(f"La pagina {pagina} non esiste (il PDF ha {self.numero_pagine} pagine).")
         return self._pdf[pagina - 1]
-
-    def _fasce_margine(self, pagina: int) -> tuple[float, float]:
-        """Restituisce (inizio_testo, fine_testo): prima c'è il margine sinistro, dopo quello destro."""
-        limiti = self.limiti_testo(pagina)
-        if limiti is not None:
-            return limiti
-        # Pagina senza testo: si usano fasce fisse in proporzione alla larghezza.
-        larghezza, _ = self.dimensione_pagina(pagina)
-        fascia = larghezza * FASCIA_MARGINE_SENZA_TESTO
-        return (fascia, larghezza - fascia)

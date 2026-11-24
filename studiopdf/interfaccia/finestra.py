@@ -15,7 +15,6 @@ from PySide6.QtWidgets import QFileDialog, QLabel, QMainWindow, QMessageBox, QTo
 from studiopdf.archivio import Archivio
 from studiopdf.documento import Documento, ErroreDocumento
 from studiopdf.impostazioni import (
-    PREFISSO_COLORE,
     ErroreImpostazioni,
     Impostazioni,
     azioni,
@@ -58,7 +57,7 @@ class FinestraPrincipale(QMainWindow):
         # Finché l'utente non cambia lo zoom a mano, la pagina si adatta alla larghezza.
         self.zoom_manuale = False
 
-        # I colori dei pallini e le impostazioni, letti all'avvio da config.json.
+        # I colori delle evidenziature e le impostazioni, letti all'avvio da config.json.
         self.tavolozza = carica_tavolozza(cartella_base())
         self.impostazioni = carica_impostazioni(cartella_base(), self.tavolozza)
 
@@ -94,7 +93,6 @@ class FinestraPrincipale(QMainWindow):
         self.vista.menuParola.connect(self.gestore_note.quando_menu_parola)
         self.vista.selezioneFatta.connect(self.gestore_note.quando_selezione)
         self.vista.clicNota.connect(self.gestore_note.apri_nota)
-        self.vista.clicMargine.connect(self.gestore_note.quando_clic_margine)
         self.vista.menuNota.connect(self.gestore_note.quando_menu_nota)
         self.vista.notaSorvolata.connect(self.gestore_note.mostra_anteprima)
         self.vista.notaLasciata.connect(self.gestore_note.nascondi_anteprima)
@@ -429,7 +427,7 @@ class FinestraPrincipale(QMainWindow):
         for azione, tasti in self.impostazioni.tasti.items():
             funzione = self._funzione_azione(azione)
             if funzione is None:
-                continue  # azione sconosciuta (es. pallino di un colore tolto)
+                continue  # azione senza funzione nella finestra (colori, salva_nota)
             self.scorciatoie[azione] = [
                 QShortcut(QKeySequence(tasto), self, activated=funzione) for tasto in tasti if tasto.strip()
             ]
@@ -445,14 +443,10 @@ class FinestraPrincipale(QMainWindow):
             "apri_ultimo_libro": self.apri_ultimo_libro,
             "chiudi_programma": self.close,
         }
-        if azione in funzioni:
-            return funzioni[azione]
-        if azione.startswith(PREFISSO_COLORE):
-            nome_colore = azione[len(PREFISSO_COLORE):]
-            # "nome=nome_colore" fissa il valore ADESSO: senza, tutte le lambda
-            # create nel ciclo userebbero l'ultimo colore.
-            return lambda nome=nome_colore: self.gestore_note.pallino_da_tastiera(nome)
-        return None
+        # I tasti dei colori ("colore_<nome>") non hanno una funzione qui: valgono
+        # solo nel menu che compare dopo aver selezionato una frase (gestore_note.py).
+        # Lo stesso per "salva_nota", che vale solo nel pop-up della nota.
+        return funzioni.get(azione)
 
     # =========================================================================
     # Sfogliare
@@ -502,16 +496,15 @@ class FinestraPrincipale(QMainWindow):
         """Ridisegna solo le note della pagina corrente (più veloce: l'immagine resta)."""
         if self.documento is None:
             return
-        sottolineature, pallini = self.archivio.della_pagina(self.pagina)
+        # I pallini (versioni vecchie) restano nel file ma non si disegnano più.
+        sottolineature, _pallini = self.archivio.della_pagina(self.pagina)
         segnalibro = self.archivio.segnalibro
         if segnalibro is not None and segnalibro.pagina != self.pagina:
             segnalibro = None  # il segnalibro si disegna solo sulla sua pagina
         self.vista.disegna_note(
             sottolineature,
-            pallini,
             segnalibro,
             self.tavolozza,
-            self.documento,
             evidenziature=self.archivio.evidenziature_della_pagina(self.pagina),
         )
 

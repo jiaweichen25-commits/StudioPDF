@@ -14,7 +14,6 @@ from PySide6.QtWidgets import QMenu
 
 from studiopdf.documento import Parola, rettangoli_per_riga, testo_frase
 from studiopdf.impostazioni import PREFISSO_COLORE, TASTI_SALVA_NOTA
-from studiopdf.interfaccia import disegno
 from studiopdf.interfaccia.anteprima import AnteprimaNota
 from studiopdf.interfaccia.menu_tasti import MenuConTasti
 from studiopdf.interfaccia.popup import RisultatoPopup, chiedi_conferma, chiedi_nota
@@ -67,15 +66,12 @@ class GestoreNote:
         except KeyError:
             return
 
-        if isinstance(nota, Evidenziatura):
-            return  # le evidenziature non hanno anteprima: si aprono con un clic
-
+        # Solo le sottolineature hanno l'anteprima: le evidenziature si aprono con un clic
+        # (e i pallini delle versioni vecchie non si mostrano più).
+        if not isinstance(nota, Sottolineatura):
+            return
         # html.escape evita che caratteri come < o & nel testo rompano il titolo (che è HTML).
-        if isinstance(nota, Sottolineatura):
-            titolo, testo = html.escape(titolo_frase(nota.testo)), nota.spiegazione
-        else:
-            titolo, testo = self._titolo_pallino_html(nota.colore), nota.testo
-        self.anteprima.mostra(titolo, testo, posizione)
+        self.anteprima.mostra(html.escape(titolo_frase(nota.testo)), nota.spiegazione, posizione)
 
     def nascondi_anteprima(self) -> None:
         self.anteprima.hide()
@@ -89,7 +85,7 @@ class GestoreNote:
 
         parola = la parola sotto il mouse. Se c'è (cioè su una sottolineatura o
         un'evidenziatura) si può mettere il segnalibro proprio su quella parola,
-        anche se fa parte di una nota. Su un pallino è None: niente segnalibro.
+        anche se fa parte di una nota. Se è None: niente segnalibro.
         """
         self.nascondi_anteprima()
         menu = QMenu(self.finestra)
@@ -125,7 +121,7 @@ class GestoreNote:
         elif isinstance(nota, Evidenziatura):
             domanda = f"Eliminare l'evidenziatura di {titolo_frase(nota.testo)}?"
         else:
-            domanda = f"Eliminare il pallino «{self._titolo_pallino(nota.colore)}»?"
+            return  # un pallino di una versione vecchia: non si mostra, quindi non si elimina
         if self.conferma(domanda + "\nL'operazione non si può annullare."):
             self.finestra.archivio.elimina(id)
             self._salva_e_ridisegna()
@@ -156,7 +152,7 @@ class GestoreNote:
 
         Il menu ha «Sottolinea e spiega…» e poi una voce per ogni colore della
         tavolozza («Evidenzia rosso — da ripassare»). Con il menu aperto, il tasto
-        di un colore (lo stesso dei pallini in Keybinding) sceglie quel colore.
+        di un colore (in ⚙ Config → Keybinding: «Evidenzia rosso — …») sceglie quel colore.
         """
         menu = MenuConTasti(self.finestra)
         azione_sottolinea = menu.addAction("Sottolinea e spiega…")
@@ -238,47 +234,6 @@ class GestoreNote:
             self._salva_e_ridisegna()
 
     # =========================================================================
-    # Pallini nel margine
-    # =========================================================================
-
-    def quando_clic_margine(self, lato: str, y: float, posizione: QPoint) -> None:
-        """Clic nel margine: menu con i colori della tavolozza, poi il pop-up."""
-        if not self._modificabile():
-            return
-        menu = QMenu(self.finestra)
-        azioni = {}  # azione del menu -> colore corrispondente
-        for colore in self.finestra.tavolozza:
-            azione = menu.addAction(_icona_colore(colore.colore), f"{colore.nome} — {colore.significato}")
-            azioni[azione] = colore
-
-        scelta = menu.exec(posizione)
-        if scelta in azioni:
-            self.nuovo_pallino(lato, y, azioni[scelta])
-
-    def pallino_da_tastiera(self, nome_colore: str) -> None:
-        """Tasto del colore premuto: pallino all'altezza del mouse, nel margine più vicino."""
-        if not self._modificabile():
-            return
-        colore = trova_colore(self.finestra.tavolozza, nome_colore)
-        punto = self.finestra.vista.punto_sotto_mouse()
-        if colore is None or punto is None:
-            self.finestra.statusBar().showMessage("Porta il mouse sulla riga dove mettere il pallino.", 4000)
-            return
-
-        larghezza, _ = self.finestra.documento.dimensione_pagina(self.finestra.pagina)
-        lato = "sx" if punto.x() < larghezza / 2 else "dx"
-        self.nuovo_pallino(lato, punto.y(), colore)
-
-    def nuovo_pallino(self, lato: str, y: float, colore: Colore) -> None:
-        """Chiede il testo e mette un pallino del colore scelto all'altezza y."""
-        if not self._modificabile():
-            return
-        risposta = self.chiedi(self._titolo_pallino(colore.nome))
-        if risposta is not None and risposta[0] == "salva":
-            self.finestra.archivio.aggiungi_pallino(self.finestra.pagina, y, lato, colore.nome, risposta[1])
-            self._salva_e_ridisegna()
-
-    # =========================================================================
     # Aprire una nota esistente (doppio clic, o «Modifica…» dal clic destro)
     # =========================================================================
 
@@ -298,7 +253,7 @@ class GestoreNote:
         elif isinstance(nota, Evidenziatura):
             titolo, testo = self._titolo_evidenziatura(nota.colore, nota.testo), nota.nota
         else:
-            titolo, testo = self._titolo_pallino(nota.colore), nota.testo
+            return  # un pallino di una versione vecchia: non si mostra più
 
         risposta = self.chiedi(titolo, testo, eliminabile=True)
         if risposta is None:
@@ -328,15 +283,8 @@ class GestoreNote:
         """
         return menu.exec(posizione)
 
-    def _titolo_pallino_html(self, nome_colore: str) -> str:
-        """Come _titolo_pallino, ma con il pallino colorato (per l'anteprima, che accetta HTML)."""
-        colore = trova_colore(self.finestra.tavolozza, nome_colore)
-        codice = colore.colore if colore else disegno.COLORE_SCONOSCIUTO
-        significato = colore.significato if colore else nome_colore
-        return f'<span style="color:{codice}">●</span> {html.escape(significato)}'
-
     def _titolo_evidenziatura(self, nome_colore: str, testo: str) -> str:
-        """Titolo del pop-up di un'evidenziatura, es. "■ dubbio · «serie monotona»"."""
+        """Titolo del pop-up di un'evidenziatura, es. "■ da ripassare · «serie monotona»"."""
         colore = trova_colore(self.finestra.tavolozza, nome_colore)
         significato = colore.significato if colore else nome_colore
         return f"■ {significato} · {titolo_frase(testo)}"
@@ -355,11 +303,6 @@ class GestoreNote:
             "Per cambiarne la nota fai doppio clic sulla sottolineatura (o un clic sull'evidenziatura).",
         )
         return False
-
-    def _titolo_pallino(self, nome_colore: str) -> str:
-        """Titolo del pop-up di un pallino: il SIGNIFICATO del colore (es. "● da ripassare")."""
-        colore = trova_colore(self.finestra.tavolozza, nome_colore)
-        return f"● {colore.significato}" if colore else f"● {nome_colore}"
 
     def _modificabile(self) -> bool:
         """Si possono cambiare le note? (c'è un libro aperto e non è in sola lettura)"""

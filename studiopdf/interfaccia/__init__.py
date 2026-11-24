@@ -5,7 +5,7 @@
 - selezione.py     la frase che si sta selezionando trascinando il mouse
 - menu_tasti.py    un menu in cui un tasto (es. 1, 2, 3) sceglie una voce
 - icone.py         legge le icone (file .svg in assets/)
-- disegno.py       disegna sottolineature, pallini e segnalibro
+- disegno.py       disegna sottolineature, evidenziature e segnalibro
 - gestore_note.py  cosa succede quando si crea/modifica/elimina una nota
 - popup.py         la finestrella per scrivere una nota
 """

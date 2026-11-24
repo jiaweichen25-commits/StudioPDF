@@ -10,7 +10,7 @@ Qt disegna tutto dentro una "scena" (QGraphicsScene) che la "vista"
 e che lo zoom sia SOLO una trasformazione della vista (un ingrandimento).
 
 Vantaggi:
-- sottolineature e pallini si disegnano usando direttamente le coordinate
+- sottolineature ed evidenziature si disegnano usando direttamente le coordinate
   salvate nelle note, senza conti;
 - quando si clicca, mapToScene() restituisce già coordinate PDF;
 - cambiando zoom, tutto resta allineato da solo.
@@ -38,7 +38,7 @@ from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsScene, QGrap
 from studiopdf.documento import Documento
 from studiopdf.interfaccia import disegno, frecce
 from studiopdf.interfaccia.selezione import Selezione
-from studiopdf.note import Evidenziatura, Pallino, Rett, Segnalibro, Sottolineatura
+from studiopdf.note import Evidenziatura, Rett, Segnalibro, Sottolineatura
 from studiopdf.tavolozza import Colore, trova_colore
 
 # Spazio (in pixel) lasciato ai lati della pagina con "adatta alla larghezza".
@@ -58,14 +58,13 @@ class VistaPagina(QGraphicsView):
     selezioneFatta = Signal(object, QPoint)  # frase selezionata trascinando: (lista di Parola, posizione sullo schermo)
     # Clic destro su una nota: (id, posizione sullo schermo, Parola sotto il mouse oppure None).
     # La parola serve per «Segnalibro qui» su una parola già sottolineata o evidenziata;
-    # è None su un pallino (nel margine non ci sono parole).
+    # è None se proprio sotto il mouse non c'è una parola (es. tra due parole).
     menuNota = Signal(str, QPoint, object)
     clicNota = Signal(str)  # DOPPIO clic su una nota: id della nota (per modificarla)
     notaSorvolata = Signal(str, QPoint)  # il mouse è appena arrivato su una nota: (id, posizione sullo schermo)
     notaLasciata = Signal()  # il mouse ha lasciato la nota
     richiestaPaginaPrecedente = Signal()  # clic sulla freccia ‹
     richiestaPaginaSuccessiva = Signal()  # clic sulla freccia ›
-    clicMargine = Signal(str, float, QPoint)  # clic nel margine: (lato "sx"/"dx", y in punti PDF, posizione sullo schermo)
     messaggio = Signal(str)  # un breve messaggio per la barra di stato
 
     def __init__(self, parent=None) -> None:
@@ -171,10 +170,8 @@ class VistaPagina(QGraphicsView):
     def disegna_note(
         self,
         sottolineature: list[Sottolineatura],
-        pallini: list[Pallino],
         segnalibro: Segnalibro | None,
         tavolozza: list[Colore],
-        documento: Documento,
         evidenziature: Sequence[Evidenziatura] = (),
     ) -> None:
         """Toglie le note disegnate prima e disegna quelle indicate."""
@@ -188,12 +185,6 @@ class VistaPagina(QGraphicsView):
             nuovi += disegno.crea_evidenziatura(evidenziatura, trova_colore(tavolozza, evidenziatura.colore))
         for sottolineatura in sottolineature:
             nuovi += disegno.crea_sottolineatura(sottolineatura)
-
-        posizioni = disegno.posizioni_pallini(pallini, documento)
-        for pallino in pallini:
-            x, y = posizioni[pallino.id]
-            nuovi.append(disegno.crea_pallino(pallino, x, y, trova_colore(tavolozza, pallino.colore)))
-
         if segnalibro is not None:
             nuovi.append(disegno.crea_segnalibro(segnalibro))
 
@@ -218,7 +209,7 @@ class VistaPagina(QGraphicsView):
         """
         if self._documento is None:
             return
-        # La parola sotto il mouse (None se non c'è, es. su un pallino nel margine).
+        # La parola sotto il mouse (None se non c'è).
         parola = self._documento.parola_in(self._pagina, punto.x(), punto.y())
         id_nota = self._id_nota_in(punto)
         if id_nota is not None:
@@ -232,25 +223,17 @@ class VistaPagina(QGraphicsView):
     def gestisci_clic_sinistro(self, punto: QPointF, posizione_schermo: QPoint) -> bool:
         """Clic sinistro nel punto (in coordinate PDF).
 
-        Restituisce True se il clic è stato "usato" (su una nota o nel margine).
+        Restituisce True se il clic è stato "usato" (cioè era su una nota):
+        - un'evidenziatura si apre subito, con il clic singolo;
+        - una sottolineatura no: per leggere c'è l'anteprima, per modificare il doppio clic.
+        Altrove il clic non è usato: può essere l'inizio della selezione di una frase.
         """
-        # 1) Su una nota esistente?
-        #    - un'evidenziatura si apre subito, con il clic singolo;
-        #    - le altre note no: per leggere c'è l'anteprima, per modificare il doppio clic.
         id_nota = self._id_nota_in(punto)
-        if id_nota is not None:
-            if self._clic_singolo_in(punto):
-                self.clicNota.emit(id_nota)
-            return True
-
-        # 2) Nel margine della pagina? Allora si vuole un pallino nuovo.
-        if self._documento is None or not self._dentro_la_pagina(punto):
+        if id_nota is None:
             return False
-        lato = self._documento.lato_margine(self._pagina, punto.x())
-        if lato is not None:
-            self.clicMargine.emit(lato, punto.y(), posizione_schermo)
-            return True
-        return False
+        if self._clic_singolo_in(punto):
+            self.clicNota.emit(id_nota)
+        return True
 
     def gestisci_doppio_clic(self, punto: QPointF) -> bool:
         """Doppio clic nel punto (in coordinate PDF): su una nota, la apre per modificarla."""
@@ -349,16 +332,6 @@ class VistaPagina(QGraphicsView):
         self.freccia_sinistra.setVisible(vicino_a_sinistra and esiste_precedente)
         self.freccia_destra.setVisible(vicino_a_destra and esiste_successiva)
 
-    def punto_sotto_mouse(self) -> QPointF | None:
-        """Dove si trova ora il mouse sulla pagina (coordinate PDF); None se non è sulla pagina."""
-        if self._documento is None:
-            return None
-        posizione = self.viewport().mapFromGlobal(QCursor.pos())
-        if not self.viewport().rect().contains(posizione):
-            return None
-        punto = self.mapToScene(posizione)
-        return punto if self._dentro_la_pagina(punto) else None
-
     def nascondi_frecce(self) -> None:
         self.freccia_sinistra.hide()
         self.freccia_destra.hide()
@@ -377,10 +350,6 @@ class VistaPagina(QGraphicsView):
         self.freccia_destra.move(area.right() - frecce.DISTANZA_DAL_BORDO - frecce.LARGHEZZA + 1, y)
         self.freccia_sinistra.raise_()  # sopra la pagina
         self.freccia_destra.raise_()
-
-    def _dentro_la_pagina(self, punto: QPointF) -> bool:
-        larghezza, altezza = self._documento.dimensione_pagina(self._pagina)
-        return 0 <= punto.x() <= larghezza and 0 <= punto.y() <= altezza
 
     def _id_nota_in(self, punto: QPointF) -> str | None:
         """L'id della nota che si trova nel punto, oppure None."""
@@ -434,7 +403,7 @@ class VistaPagina(QGraphicsView):
         if evento.button() == Qt.MouseButton.LeftButton:
             punto_vista = evento.position().toPoint()
             punto = self.mapToScene(punto_vista)
-            # Prima si guarda se il clic è su una nota o nel margine...
+            # Prima si guarda se il clic è su una nota...
             if self.gestisci_clic_sinistro(punto, evento.globalPosition().toPoint()):
                 evento.accept()
                 return

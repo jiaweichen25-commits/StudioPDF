@@ -1,7 +1,7 @@
 """Un menu in cui alcune voci si scelgono anche premendo un tasto (es. 1, 2, 3).
 
 Serve al menu che compare dopo aver selezionato una frase: con il menu aperto,
-premere il tasto di un colore (lo stesso dei pallini in ⚙ Config → Keybinding)
+premere il tasto di un colore (in ⚙ Config → Keybinding: «Evidenzia <colore>»)
 equivale a cliccare la voce «Evidenzia <colore>».
 
 Come si usa

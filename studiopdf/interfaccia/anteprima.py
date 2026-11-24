@@ -42,7 +42,7 @@ class AnteprimaNota(QFrame):
 
         self.etichetta_titolo = QLabel()
         self.etichetta_titolo.setObjectName("titolo")
-        self.etichetta_titolo.setTextFormat(Qt.TextFormat.RichText)  # il titolo può contenere un pallino colorato
+        self.etichetta_titolo.setTextFormat(Qt.TextFormat.RichText)  # il titolo è HTML (es. la frase con i caratteri speciali protetti)
 
         self.etichetta_testo = QLabel()
         self.etichetta_testo.setObjectName("testo")
