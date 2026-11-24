@@ -41,7 +41,7 @@ clicca **Ulteriori informazioni → Esegui comunque**.
 | Leggere una nota | passa il mouse sopra la sottolineatura (anteprima); un clic sull'evidenziatura |
 | Modificare una nota | doppio clic sulla sottolineatura; un clic sull'evidenziatura |
 | Eliminare una nota | clic destro sulla nota → Elimina |
-| Segnalibro | clic destro sulla parola → Segnalibro qui (anche su una parola sottolineata o evidenziata) |
+| Segnalibro | clic destro sulla parola: il segnalibro va subito lì. Su una parola sottolineata o evidenziata: clic destro → Segnalibro qui |
 
 Due note non possono sovrapporsi: se selezioni una frase che tocca una sottolineatura o
 un'evidenziatura esistente, il programma ti avvisa.

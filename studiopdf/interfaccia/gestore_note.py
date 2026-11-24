@@ -131,17 +131,17 @@ class GestoreNote:
         return chiedi_conferma(self.finestra, "Elimina nota", domanda)
 
     # =========================================================================
-    # Menu del clic destro su una parola
+    # Clic destro su una parola
     # =========================================================================
 
     def quando_menu_parola(self, parola: Parola, posizione: QPoint) -> None:
-        # Per sottolineare non si passa più da qui: si seleziona la frase
-        # trascinando il mouse (vedi quando_selezione).
-        menu = QMenu(self.finestra)
-        azione_segnalibro = menu.addAction("Segnalibro qui")
+        """Clic destro su una parola: il segnalibro va SUBITO lì, senza menu.
 
-        if self.mostra_menu(menu, posizione) is azione_segnalibro:
-            self.metti_segnalibro(parola)
+        (Sulle sottolineature e sulle evidenziature invece il menu resta, perché
+        serve anche per Modifica / Elimina: vedi quando_menu_nota.)
+        La posizione non serve più, ma il segnale della vista la manda comunque.
+        """
+        self.metti_segnalibro(parola)
 
     # =========================================================================
     # Menu dopo aver selezionato una frase trascinando il mouse
