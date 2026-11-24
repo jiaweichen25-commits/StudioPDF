@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QFileDialog, QLabel, QMainWindow, QMessageBox, QTo
 from studiopdf.archivio import Archivio
 from studiopdf.documento import Documento, ErroreDocumento
 from studiopdf.impostazioni import (
-    PREFISSO_PALLINO,
+    PREFISSO_COLORE,
     ErroreImpostazioni,
     Impostazioni,
     azioni,
@@ -447,8 +447,8 @@ class FinestraPrincipale(QMainWindow):
         }
         if azione in funzioni:
             return funzioni[azione]
-        if azione.startswith(PREFISSO_PALLINO):
-            nome_colore = azione[len(PREFISSO_PALLINO):]
+        if azione.startswith(PREFISSO_COLORE):
+            nome_colore = azione[len(PREFISSO_COLORE):]
             # "nome=nome_colore" fissa il valore ADESSO: senza, tutte le lambda
             # create nel ciclo userebbero l'ultimo colore.
             return lambda nome=nome_colore: self.gestore_note.pallino_da_tastiera(nome)

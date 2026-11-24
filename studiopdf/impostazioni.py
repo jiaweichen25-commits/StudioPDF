@@ -5,7 +5,7 @@ Stanno in config.json (lo stesso file della tavolozza), in tre sezioni:
     "percorsi": {"cartella_libri": "C:/Libri", "ultimo_libro": "C:/Libri/Analisi1.pdf",
                  "cartella_note": "", "cartella_note_precedente": ""}
     "tasti":    {"pagina_successiva": ["Right", "PgDown"], ...}
-    "opzioni":  {"frecce_laterali": true, "anteprima_note": true}
+    "opzioni":  {"frecce_laterali": true, "anteprima_note": true, "pannello_laterale": true}
 
 Regole importanti:
 - un valore mancante o sbagliato prende quello predefinito (così un
@@ -37,6 +37,7 @@ AZIONI_FISSE: list[tuple[str, str]] = [
     ("apri_libro", "Apri libro"),
     ("apri_ultimo_libro", "Apri l'ultimo libro"),
     ("chiudi_programma", "Chiudi programma"),
+    ("pannello_laterale", "Mostra/nascondi il pannello laterale"),
     # Questa vale solo DENTRO il pop-up della nota (vedi interfaccia/popup.py),
     # non nella finestra principale.
     ("salva_nota", "Salva nota (nel pop-up)"),
@@ -55,11 +56,17 @@ _TASTI_FISSI: dict[str, list[str]] = {
     "apri_libro": ["Ctrl+O", ""],
     "apri_ultimo_libro": ["Ctrl+Shift+O", ""],  # vicino a Ctrl+O, che apre un libro qualsiasi
     "chiudi_programma": ["Ctrl+W", ""],
+    "pannello_laterale": ["F4", ""],  # come in Firefox
     "salva_nota": TASTI_SALVA_NOTA,
 }
 
-# Per ogni colore della tavolozza c'è l'azione "pallino_<nome>".
-PREFISSO_PALLINO = "pallino_"
+# Per ogni colore della tavolozza c'è l'azione "colore_<nome>": il suo tasto
+# sceglie quel colore nel menu che compare dopo aver selezionato una frase.
+PREFISSO_COLORE = "colore_"
+
+# Prima della v9 c'erano i pallini nel margine e le azioni si chiamavano
+# "pallino_<nome>": i tasti salvati con quel nome vengono ancora letti.
+PREFISSO_VECCHIO_PALLINO = "pallino_"
 
 # Ai primi nove colori vanno i tasti da 1 a 9.
 MASSIMO_TASTI_NUMERICI = 9
@@ -80,6 +87,7 @@ class Impostazioni:
     tasti: dict[str, list[str]] = field(default_factory=dict)  # azione -> [tasto 1, tasto 2]
     frecce_laterali: bool = True  # frecce ‹ › ai lati della pagina
     anteprima_note: bool = True  # schedina passando il mouse su una nota
+    pannello_laterale: bool = True  # pannello a sinistra con «Segnati» e l'indice
 
 
 # =============================================================================
@@ -88,12 +96,12 @@ class Impostazioni:
 
 
 def azioni(tavolozza: list[Colore]) -> list[tuple[str, str]]:
-    """Tutte le azioni a cui si può dare un tasto: quelle fisse più un pallino per colore."""
-    pallini = [
-        (PREFISSO_PALLINO + colore.nome, f"Pallino {colore.nome} — {colore.significato}")
+    """Tutte le azioni a cui si può dare un tasto: quelle fisse più una per colore."""
+    colori = [
+        (PREFISSO_COLORE + colore.nome, f"Evidenzia {colore.nome} — {colore.significato}")
         for colore in tavolozza
     ]
-    return AZIONI_FISSE + pallini
+    return AZIONI_FISSE + colori
 
 
 def tasti_predefiniti(tavolozza: list[Colore]) -> dict[str, list[str]]:
@@ -101,7 +109,7 @@ def tasti_predefiniti(tavolozza: list[Colore]) -> dict[str, list[str]]:
     tasti = {azione: list(coppia) for azione, coppia in _TASTI_FISSI.items()}
     for posizione, colore in enumerate(tavolozza):
         numero = str(posizione + 1) if posizione < MASSIMO_TASTI_NUMERICI else ""
-        tasti[PREFISSO_PALLINO + colore.nome] = [numero, ""]
+        tasti[PREFISSO_COLORE + colore.nome] = [numero, ""]
     return tasti
 
 
@@ -126,6 +134,9 @@ def carica_impostazioni(cartella: Path, tavolozza: list[Colore]) -> Impostazioni
     tasti: dict[str, list[str]] = {}
     for azione in predefiniti:
         valore = tasti_salvati.get(azione)
+        if valore is None and azione.startswith(PREFISSO_COLORE):
+            # config.json di prima della v9: "pallino_rosso" invece di "colore_rosso".
+            valore = tasti_salvati.get(PREFISSO_VECCHIO_PALLINO + azione[len(PREFISSO_COLORE):])
         if _tasti_validi(valore):
             # Completa fino a due caselle: ["D"] -> ["D", ""]
             tasti[azione] = (list(valore) + [""] * TASTI_PER_AZIONE)[:TASTI_PER_AZIONE]
@@ -151,6 +162,7 @@ def carica_impostazioni(cartella: Path, tavolozza: list[Colore]) -> Impostazioni
         tasti=tasti,
         frecce_laterali=_vero_falso_o(opzioni.get("frecce_laterali"), True),
         anteprima_note=_vero_falso_o(opzioni.get("anteprima_note"), True),
+        pannello_laterale=_vero_falso_o(opzioni.get("pannello_laterale"), True),
     )
 
 
@@ -221,6 +233,7 @@ def salva_impostazioni(cartella: Path, impostazioni: Impostazioni) -> None:
     dati["opzioni"] = {
         "frecce_laterali": impostazioni.frecce_laterali,
         "anteprima_note": impostazioni.anteprima_note,
+        "pannello_laterale": impostazioni.pannello_laterale,
     }
 
     # Come per le note: prima un file temporaneo, poi la sostituzione in un colpo solo.

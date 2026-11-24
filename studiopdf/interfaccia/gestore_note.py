@@ -13,7 +13,7 @@ from PySide6.QtGui import QAction, QColor, QIcon, QPixmap
 from PySide6.QtWidgets import QMenu
 
 from studiopdf.documento import Parola, rettangoli_per_riga, testo_frase
-from studiopdf.impostazioni import PREFISSO_PALLINO, TASTI_SALVA_NOTA
+from studiopdf.impostazioni import PREFISSO_COLORE, TASTI_SALVA_NOTA
 from studiopdf.interfaccia import disegno
 from studiopdf.interfaccia.anteprima import AnteprimaNota
 from studiopdf.interfaccia.menu_tasti import MenuConTasti
@@ -164,7 +164,7 @@ class GestoreNote:
 
         azioni_colore = {}  # voce del menu -> colore della tavolozza
         for colore in self.finestra.tavolozza:
-            tasti = self.finestra.impostazioni.tasti.get(PREFISSO_PALLINO + colore.nome, [])
+            tasti = self.finestra.impostazioni.tasti.get(PREFISSO_COLORE + colore.nome, [])
             testo = f"Evidenzia {colore.nome} — {colore.significato}"
             primo_tasto = next((tasto for tasto in tasti if tasto.strip()), "")
             if primo_tasto:
