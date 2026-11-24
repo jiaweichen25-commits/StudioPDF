@@ -46,3 +46,8 @@ def icona_da_svg(percorso: Path) -> QIcon:
 def icona_ultimo_libro() -> QIcon:
     """L'icona del pulsante «Apri l'ultimo libro» (assets/ultimo_libro.svg)."""
     return icona_da_svg(cartella_assets() / "ultimo_libro.svg")
+
+
+def icona_pannello() -> QIcon:
+    """L'icona del pulsante che mostra/nasconde il pannello laterale (assets/pannello.svg)."""
+    return icona_da_svg(cartella_assets() / "pannello.svg")

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Icona «Pannello laterale»: una finestra con una colonna a sinistra, in bianco e nero
+  (come quella di Firefox per lo stesso pannello).
+
+  Come si legge: viewBox="0 0 64 64" è un foglio di 64 x 64 unità (la y cresce verso il BASSO).
+  <rect x y width height rx> = rettangolo (rx = angoli arrotondati);  <path d="M x y L x y"> = linea.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- La finestra. -->
+  <rect x="5" y="9" width="54" height="46" rx="6" fill="#FFFFFF" stroke="#000000" stroke-width="4"/>
+  <!-- La colonna di sinistra (il pannello), piena di nero. -->
+  <path d="M11 9 L24 9 L24 55 L11 55 Q5 55 5 49 L5 15 Q5 9 11 9 Z" fill="#000000"/>
+  <!-- Tre righe bianche nella colonna: le voci dell'indice. -->
+  <g stroke="#FFFFFF" stroke-width="3" stroke-linecap="round">
+    <path d="M10 20 L19 20"/>
+    <path d="M10 28 L19 28"/>
+    <path d="M10 36 L19 36"/>
+  </g>
+</svg>
